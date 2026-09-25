@@ -44,6 +44,14 @@ export interface Dict {
     langLabel: string
   }
 
+  /** Переключатель оформления в шапке и в мобильном меню. */
+  theme: {
+    label: string
+    auto: string
+    light: string
+    dark: string
+  }
+
   hero: {
     eyebrow: string
     /** Заголовок разбит на строки, чтобы держать перенос осознанно. */
@@ -91,7 +99,10 @@ export interface Dict {
     phoneLabel: string
     phone: string
     /** Тот же номер без пробелов — для href tel:. */
+    /** Пустая строка = номер не задан: ссылка tel: не строится. */
     phoneHref: string
+    /** Подсказка у незаполненных демо-данных (адрес, телефон, лицензия). */
+    placeholderNote: string
     hoursLabel: string
     hours: string
     telegramLabel: string

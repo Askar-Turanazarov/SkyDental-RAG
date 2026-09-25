@@ -1,0 +1,127 @@
+/* ============================================================
+   Коронка героя: появление и покой.
+
+   Появление укладывается в те же ~1.4 с, что и сборка girih, —
+   герой собирается ОДНИМ событием, а не двумя конкурирующими
+   (references/hig/motion.md: движение осмысленное, короткое, редкое).
+
+   Порядок неслучаен и повторяет то, как устроен предмет: сначала
+   контур эмали, потом её тело, потом плотная основа под ней, и
+   последней — граница «глазурь / основа», ради которой рисунок и
+   существует.
+   ============================================================ */
+
+.crown__body {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* --- 1. Контур эмали прорисовывается ---
+   pathLength="1" в разметке нормирует длину пути к единице, поэтому
+   здесь не нужны магические числа под конкретную кривую. */
+.crown__outline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: crown-draw 800ms var(--ease-out) forwards;
+}
+
+/* --- 2. Тело эмали проявляется вслед за контуром --- */
+.crown__enamel {
+  opacity: 0;
+  animation: crown-fade 450ms var(--ease-out) 200ms forwards;
+}
+
+/* --- 3. Плотная основа под эмалью --- */
+.crown__core {
+  opacity: 0;
+  animation: crown-fade-core 450ms var(--ease-out) 380ms forwards;
+}
+
+/* --- 4. Граница глазури: главная мысль рисунка, поэтому последняя --- */
+.crown__seam {
+  opacity: 0;
+  animation: crown-fade 350ms var(--ease-out) 650ms forwards;
+}
+
+/* --- 5. Блик проходит по эмали один раз --- */
+.crown__shine {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: crown-shine 600ms var(--ease-out) 820ms forwards;
+}
+
+@keyframes crown-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes crown-fade {
+  to { opacity: 1; }
+}
+/* У основы финальная непрозрачность 0.9 — она лежит ПОД эмалью и
+   не должна выходить на передний план. */
+@keyframes crown-fade-core {
+  to { opacity: 0.9; }
+}
+@keyframes crown-shine {
+  from { stroke-dashoffset: 1; opacity: 0; }
+  40% { opacity: 0.9; }
+  to { stroke-dashoffset: 0; opacity: 0.9; }
+}
+
+/* --- Покой: «вдох» ---
+   Амплитуда намеренно крошечная: рисунок должен быть живым, но не
+   перетягивать внимание с заголовка и кнопки записи. Свечение
+   пульсирует в противофазе — так форма кажется объёмной, а не
+   просто едущей вверх-вниз. */
+@media (prefers-reduced-motion: no-preference) {
+  .crown__body {
+    animation: crown-breathe 7s ease-in-out 1.6s infinite alternate;
+  }
+  .crown__glow {
+    animation: crown-glow 7s ease-in-out 1.6s infinite alternate-reverse;
+  }
+}
+
+@keyframes crown-breathe {
+  from { translate: 0 -5px; }
+  to { translate: 0 5px; }
+}
+@keyframes crown-glow {
+  from { opacity: 1; }
+  to { opacity: 0.68; }
+}
+
+/* --- Параллакс: коронка слегка обгоняет контент ---
+   Средний план между дальним girih и неподвижным текстом. Разные
+   скорости трёх слоёв и дают глубину. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .crown {
+      animation: crown-parallax linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 100vh;
+    }
+  }
+}
+
+@keyframes crown-parallax {
+  from { translate: 0 0; }
+  to { translate: 0 -6%; }
+}
+
+/* --- Уменьшение движения: сразу финальное состояние --- */
+@media (prefers-reduced-motion: reduce) {
+  .crown__outline,
+  .crown__shine {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .crown__enamel,
+  .crown__seam {
+    opacity: 1;
+    animation: none;
+  }
+  .crown__core {
+    opacity: 0.9;
+    animation: none;
+  }
+}

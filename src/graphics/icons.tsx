@@ -202,3 +202,28 @@ export const IconCheck = (p: IconProps) => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </Icon>
 )
+
+/* ---------- Оформление ----------
+   Три состояния переключателя темы. «Авто» — круг, закрашенный
+   наполовину: та же метафора, что в системных настройках, где
+   половина света и половина тени означает «решает система». */
+
+export const IconSun = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
+  </Icon>
+)
+
+export const IconMoon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M20 14.3A8.5 8.5 0 0 1 9.7 4a8.5 8.5 0 1 0 10.3 10.3z" />
+  </Icon>
+)
+
+export const IconAuto = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none" />
+  </Icon>
+)

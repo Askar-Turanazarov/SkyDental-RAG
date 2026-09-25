@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useT } from '../i18n/LocaleContext'
 import { LangSwitcher } from './LangSwitcher'
+import { ThemeSwitcher } from './ThemeSwitcher'
 import { IconClose, IconMenu } from '../graphics/icons'
 
 const SECTIONS = ['services', 'about', 'faq', 'contacts'] as const
@@ -66,9 +67,29 @@ export function Header() {
               </li>
             ))}
           </ul>
+
+          {/* Вторичный стиль намеренно: пока меню открыто, под ним виден
+              залитый акцентом CTA героя, а бюджет цвета — одна залитая
+              кнопка на экран (liquid-glass.md). */}
+          <a className="btn btn--secondary btn--lg nav__cta" href="#contacts" onClick={close}>
+            {t.nav.book}
+          </a>
+
+          {/* Оформление в мобильном меню: в узкой шапке рядом с языком
+              и бургером для него нет честного места. На десктопе эта
+              строка скрыта, а переключатель стоит в шапке. */}
+          <div className="nav__extra">
+            <span className="nav__extra-label">
+              {t.theme.label}
+            </span>
+            <ThemeSwitcher withLabels />
+          </div>
         </nav>
 
         <div className="header__actions">
+          <span className="header__theme">
+            <ThemeSwitcher />
+          </span>
           <LangSwitcher />
           <a className="btn btn--primary header__cta" href="#contacts" onClick={close}>
             {t.nav.book}

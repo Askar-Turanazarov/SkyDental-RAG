@@ -10,8 +10,32 @@
       name="description"
       content="Стоматология SkyDental в Ташкенте: имплантация, прозрачные алайнеры, керамические коронки, гигиена и детский приём. Цифровой протокол, свой зубной техник, гарантия на работы."
     />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a1420" media="(prefers-color-scheme: dark)" />
+    <!-- Цвет строки статуса. Без media-вариантов: тему ведёт JS,
+         и ThemeContext переписывает content при каждом переключении. -->
+    <meta name="theme-color" content="#ffffff" />
+
+    <!--
+      Тема до первой отрисовки. Скрипт синхронный и стоит в <head>
+      намеренно: если выставлять data-theme из React, между разбором
+      HTML и гидрацией мелькнёт светлый фон. Логика повторяет
+      ThemeContext ровно в одном: как сохранённый выбор превращается
+      в light/dark. Ключ хранилища должен совпадать со STORAGE_KEY.
+    -->
+    <script>
+      (function () {
+        var pref = 'auto'
+        try {
+          pref = localStorage.getItem('skydental.theme') || 'auto'
+        } catch (e) {
+          /* приватный режим — читаем систему */
+        }
+        var dark =
+          pref === 'dark' ||
+          (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="SkyDental — цифровая стоматология в Ташкенте" />

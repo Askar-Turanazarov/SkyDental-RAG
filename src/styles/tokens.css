@@ -97,34 +97,41 @@
 
 /* --- Цвет: тёмная тема ---
    Смягчённые белые, не чистый чёрный (dark-mode.md).
-   Собственного переключателя темы нет: следуем системе. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #0a1420;
-    --surface-raised: #121e2d;
-    --surface-sunken: #060d16;
 
-    --content: #e8edf3;           /* 15.8:1 ✓ */
-    --content-secondary: #9fb0c4; /*  8.4:1 ✓ */
-    --content-tertiary: #76889d;  /*  5.0:1 ✓ */
+   Тема приходит атрибутом data-theme на <html>: его выставляет
+   встроенный скрипт в index.html до первой отрисовки, а дальше
+   ведёт ThemeContext. Значение «Авто» резолвится в JS, поэтому
+   здесь нужен ровно один блок тёмных токенов, а не две копии —
+   под media-запросом и под атрибутом. Единственный источник правды
+   для тёмной палитры — он. */
+:root[data-theme='light'] { color-scheme: light; }
 
-    --accent: #5ea8ff;            /*  7.4:1 ✓ */
-    --accent-hover: #86bdff;
-    --accent-sunken: #14273f;
-    --on-accent: #06182e;         /*  7.0:1 на --accent ✓ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #0a1420;
+  --surface-raised: #121e2d;
+  --surface-sunken: #060d16;
 
-    --glaze: #2fd3be;
-    --glaze-deep: #5ee3d1;
+  --content: #e8edf3;           /* 15.8:1 ✓ */
+  --content-secondary: #9fb0c4; /*  8.4:1 ✓ */
+  --content-tertiary: #76889d;  /*  5.0:1 ✓ */
 
-    --signal: #ff8a9b;            /*  8.1:1 ✓ */
-    --signal-sunken: #2a1620;
+  --accent: #5ea8ff;            /*  7.4:1 ✓ */
+  --accent-hover: #86bdff;
+  --accent-sunken: #14273f;
+  --on-accent: #06182e;         /*  7.0:1 на --accent ✓ */
 
-    --hairline: rgba(232, 237, 243, 0.12);
-    --hairline-strong: rgba(232, 237, 243, 0.22);
+  --glaze: #2fd3be;
+  --glaze-deep: #5ee3d1;
 
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
-    --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.45);
-  }
+  --signal: #ff8a9b;            /*  8.1:1 ✓ */
+  --signal-sunken: #2a1620;
+
+  --hairline: rgba(232, 237, 243, 0.12);
+  --hairline-strong: rgba(232, 237, 243, 0.22);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
 /* Увеличенный контраст: усиливаем волосяные линии и убираем
@@ -136,12 +143,10 @@
     --hairline: rgba(11, 27, 43, 0.3);
     --hairline-strong: rgba(11, 27, 43, 0.5);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --content-secondary: #c9d6e4;
-      --content-tertiary: #9fb0c4;
-      --hairline: rgba(232, 237, 243, 0.35);
-      --hairline-strong: rgba(232, 237, 243, 0.55);
-    }
+  :root[data-theme='dark'] {
+    --content-secondary: #c9d6e4;
+    --content-tertiary: #9fb0c4;
+    --hairline: rgba(232, 237, 243, 0.35);
+    --hairline-strong: rgba(232, 237, 243, 0.55);
   }
 }

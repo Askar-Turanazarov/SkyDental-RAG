@@ -1,4 +1,5 @@
 import { useT } from '../i18n/LocaleContext'
+import { PhoneLink } from './PhoneLink'
 
 const SECTIONS = ['services', 'about', 'faq', 'contacts'] as const
 
@@ -31,7 +32,7 @@ export function Footer() {
             <h2 className="footer__heading">{t.footer.contactsTitle}</h2>
             <ul>
               <li>
-                <a href={`tel:${t.contacts.phoneHref}`}>{t.contacts.phone}</a>
+                <PhoneLink>{t.contacts.phone}</PhoneLink>
               </li>
               <li>
                 <a href="https://t.me/skydental_uz" target="_blank" rel="noopener noreferrer">
@@ -45,7 +46,9 @@ export function Footer() {
 
           <div className="footer__col">
             <h2 className="footer__heading">{t.footer.legalTitle}</h2>
-            <p>{t.footer.license}</p>
+            <p data-placeholder="true" title={t.contacts.placeholderNote}>
+              {t.footer.license}
+            </p>
             <p>{t.footer.disclaimer}</p>
           </div>
         </div>

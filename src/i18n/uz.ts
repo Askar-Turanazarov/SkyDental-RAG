@@ -20,6 +20,13 @@ export const uz: Dict = {
     langLabel: 'Sayt tili',
   },
 
+  theme: {
+    label: 'Koʻrinish',
+    auto: 'Avto',
+    light: 'Yorugʻ',
+    dark: 'Qorongʻi',
+  },
+
   hero: {
     eyebrow: 'Toshkent · Raqamli stomatologiya',
     titleLines: ['Emalingizdan', 'farq qilmaydigan', 'keramika'],
@@ -149,10 +156,11 @@ export const uz: Dict = {
     title: 'Keling yoki yozing',
     lede: 'Biz «Amir Temur xiyoboni» bekatidan oʻn daqiqa masofada joylashganmiz. Telefon orqali yozilish odatda shakldan koʻra tezroq.',
     addressLabel: 'Manzil',
-    address: 'Toshkent, Amir Temur koʻchasi, 108, 2-qavat',
+    address: 'Toshkent, Amir Temur koʻchasi, __-uy, __-qavat',
     phoneLabel: 'Telefon',
-    phone: '+998 71 123 45 67',
-    phoneHref: '+998711234567',
+    phone: '+998 __ ___ __ __',
+    phoneHref: '',
+    placeholderNote: 'Demo maʼlumot: ishga tushirishdan oldin haqiqiysiga almashtiring',
     hoursLabel: 'Ish vaqti',
     hours: 'Du–Sha, 09:00–20:00 · Yak — dam olish kuni',
     telegramLabel: 'Telegram',
@@ -181,7 +189,7 @@ export const uz: Dict = {
     navTitle: 'Boʻlimlar',
     contactsTitle: 'Aloqa',
     legalTitle: 'Hujjatlar',
-    license: 'Oʻzbekiston Respublikasi Sogʻliqni saqlash vazirligining 12-345-sonli litsenziyasi.',
+    license: 'Oʻzbekiston Respublikasi Sogʻliqni saqlash vazirligining __-____-sonli litsenziyasi.',
     disclaimer:
       'Saytdagi maʼlumot tibbiy konsultatsiya emas va shifokor koʻrigini almashtirmaydi.',
     copyright: '© 2026 SkyDental. Barcha huquqlar himoyalangan.',

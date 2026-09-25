@@ -1,27 +1,23 @@
-import type { Dict, Locale } from '../../i18n/types'
-import { ru } from '../../i18n/ru'
-import { uz } from '../../i18n/uz'
+import type { Locale } from '../../i18n/types'
+import { KNOWLEDGE } from './knowledgeBase'
+import type { KnowledgeDoc } from './knowledgeBase'
 
 /* ============================================================
-   ВРЕМЕННАЯ база знаний бота-заглушки.
+   ПОИСК бота-заглушки по базе знаний клиники.
 
-   База собирается из текстов самого сайта (FAQ, услуги, контакты),
-   поэтому бот-заглушка отвечает теми же формулировками, что и
-   страница, и не может им противоречить. Когда подключится
-   настоящий RAG (см. ragClient.ts), этот файл можно удалить.
+   Сами документы живут в `content/rag/` и разбираются в
+   knowledgeBase.ts — здесь только поиск. Раньше база собиралась из
+   текстов самой страницы, и бот не мог сказать ничего сверх того,
+   что и так написано на сайте; теперь он отвечает по прайсу, FAQ и
+   графику работы.
 
    Поиск — простое пересечение основ слов (первые 5 букв), этого
-   хватает для русских и узбекских словоформ на демо-объёме.
+   хватает для русских и узбекских словоформ на демо-объёме. Когда
+   подключится настоящий RAG (см. ragClient.ts), этот файл можно
+   удалить, а документы останутся: их и получит бэкенд.
    ============================================================ */
 
-interface Doc {
-  /** Текст, по которому ищем. */
-  haystack: string
-  answer: string
-  source: string
-  /** Документ про цену услуги — поднимается, если в вопросе есть «сколько/цена». */
-  isPrice: boolean
-}
+type Doc = KnowledgeDoc
 
 /** Слова вопроса, которые ничего не говорят о теме. */
 const STOPWORDS = new Set([
@@ -41,45 +37,13 @@ function stems(text: string): string[] {
     .map((w) => w.slice(0, 5))
 }
 
-function buildDocs(t: Dict): Doc[] {
-  const docs: Doc[] = []
-
-  for (const item of t.faq.items) {
-    docs.push({
-      haystack: item.q + ' ' + item.a,
-      answer: item.a,
-      source: `${t.faq.eyebrow} · ${item.q}`,
-      isPrice: false,
-    })
-  }
-
-  for (const s of t.services.items) {
-    docs.push({
-      haystack: s.name + ' ' + s.benefit,
-      answer: `${s.name} — ${t.services.from} ${s.price} UZS. ${s.benefit} ${t.services.priceNote}`,
-      source: `${t.services.eyebrow} · ${s.name}`,
-      isPrice: true,
-    })
-  }
-
-  const c = t.contacts
-  docs.push({
-    haystack: [c.title, c.lede, c.address, c.hours, t.nav.book].join(' '),
-    answer: `${c.lede} ${c.phoneLabel}: ${c.phone}. ${c.hoursLabel}: ${c.hours}. ${c.addressLabel}: ${c.address}.`,
-    source: `${c.eyebrow}`,
-    isPrice: false,
-  })
-
-  return docs
-}
-
 interface IndexedDoc extends Doc {
   terms: Set<string>
 }
 
 const INDEX: Record<Locale, IndexedDoc[]> = {
-  ru: buildDocs(ru).map((d) => ({ ...d, terms: new Set(stems(d.haystack)) })),
-  uz: buildDocs(uz).map((d) => ({ ...d, terms: new Set(stems(d.haystack)) })),
+  ru: KNOWLEDGE.ru.map((d) => ({ ...d, terms: new Set(stems(d.haystack)) })),
+  uz: KNOWLEDGE.uz.map((d) => ({ ...d, terms: new Set(stems(d.haystack)) })),
 }
 
 export function searchMockKnowledge(question: string, locale: Locale): Doc | null {

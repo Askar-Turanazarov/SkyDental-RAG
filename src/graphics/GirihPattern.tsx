@@ -19,9 +19,13 @@ import './girih.css'
  * скринридеров целиком.
  */
 
-const TILE = 150
-const COLS = 9
-const ROWS = 6
+/* Размер мотива подобран так, чтобы фон читался изразцовой СЕТКОЙ,
+   а не обоями: мелкий и плотный модуль держится как фактура и не
+   спорит с заголовком. Пропорция viewBox при этом остаётся близкой
+   к 3:2, как была. */
+const TILE = 96
+const COLS = 14
+const ROWS = 10
 const VIEW_W = TILE * COLS
 const VIEW_H = TILE * ROWS
 

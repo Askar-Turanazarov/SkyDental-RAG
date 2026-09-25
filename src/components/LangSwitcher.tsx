@@ -10,13 +10,17 @@ const OPTIONS: { value: Locale; short: string; full: string }[] = [
  * Сегментированный переключатель языка. Выбор одного из двух —
  * это radiogroup, а не две независимые кнопки, поэтому семантика
  * radio: скринридер объявляет «выбрано 1 из 2».
+ *
+ * Разметка общая с переключателем темы (.seg): два контрола рядом в
+ * шапке должны читаться как один элемент интерфейса, а не как две
+ * разные придумки.
  */
 export function LangSwitcher() {
   const { locale, setLocale } = useLocale()
   const t = useT()
 
   return (
-    <div className="lang" role="radiogroup" aria-label={t.nav.langLabel}>
+    <div className="seg" role="radiogroup" aria-label={t.nav.langLabel}>
       {OPTIONS.map((opt) => {
         const active = opt.value === locale
         return (
@@ -25,7 +29,7 @@ export function LangSwitcher() {
             type="button"
             role="radio"
             aria-checked={active}
-            className="lang__opt"
+            className="seg__opt"
             data-active={active}
             onClick={() => setLocale(opt.value)}
             lang={opt.value}
@@ -39,3 +43,4 @@ export function LangSwitcher() {
     </div>
   )
 }
+

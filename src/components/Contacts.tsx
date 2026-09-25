@@ -3,9 +3,12 @@ import type { FormEvent } from 'react'
 import { useT } from '../i18n/LocaleContext'
 import { IconArrowUpRight, IconCheck, IconClock, IconPhone, IconPin, IconTelegram } from '../graphics/icons'
 import { useReveal } from './useReveal'
+import { PhoneLink } from './PhoneLink'
 
 const TELEGRAM_URL = 'https://t.me/skydental_uz'
-const MAP_URL = 'https://yandex.uz/maps/?text=' + encodeURIComponent('Ташкент, Амира Темура 108')
+// Номер дома — заглушка, поэтому ищем по улице: ссылка остаётся
+// рабочей и не ведёт в случайный двор. Уточнить вместе с адресом.
+const MAP_URL = 'https://yandex.uz/maps/?text=' + encodeURIComponent('Ташкент, улица Амира Темура')
 
 /** +998 и 9 цифр; допускаем ввод без кода страны — тогда 9 цифр. */
 function normalizePhone(raw: string): string | null {
@@ -83,7 +86,9 @@ export function Contacts() {
                   <IconPin size={20} />
                   {t.contacts.addressLabel}
                 </dt>
-                <dd>{t.contacts.address}</dd>
+                <dd data-placeholder="true" title={t.contacts.placeholderNote}>
+                  {t.contacts.address}
+                </dd>
               </div>
               <div className="contact-list__row">
                 <dt>
@@ -91,7 +96,7 @@ export function Contacts() {
                   {t.contacts.phoneLabel}
                 </dt>
                 <dd>
-                  <a href={`tel:${t.contacts.phoneHref}`}>{t.contacts.phone}</a>
+                  <PhoneLink>{t.contacts.phone}</PhoneLink>
                 </dd>
               </div>
               <div className="contact-list__row">

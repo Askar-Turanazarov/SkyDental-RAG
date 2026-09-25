@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { useLocale, useT } from '../../i18n/LocaleContext'
+import { PhoneLink } from '../PhoneLink'
 import {
   IconChat,
   IconClose,
@@ -170,10 +171,10 @@ export function ChatWidget() {
                   {m.notFound ? (
                     <div className="msg__bubble msg__bubble--notfound">
                       <p>{c.notFound}</p>
-                      <a className="btn btn--secondary chat__call" href={`tel:${t.contacts.phoneHref}`}>
+                      <PhoneLink className="btn btn--secondary chat__call">
                         <IconPhone size={18} />
                         {c.fallbackCall}
-                      </a>
+                      </PhoneLink>
                     </div>
                   ) : (
                     <div className="msg__bubble">
@@ -253,10 +254,10 @@ export function ChatWidget() {
                       <IconRetry size={18} />
                       {c.retry}
                     </button>
-                    <a className="btn btn--quiet" href={`tel:${t.contacts.phoneHref}`}>
+                    <PhoneLink className="btn btn--quiet">
                       <IconPhone size={18} />
                       {c.fallbackCall}
-                    </a>
+                    </PhoneLink>
                   </div>
                 </div>
               </div>
@@ -293,7 +294,7 @@ export function ChatWidget() {
 
           <p className="chat__fallback">
             {c.fallbackTitle}{' '}
-            <a href={`tel:${t.contacts.phoneHref}`}>{t.contacts.phone}</a>
+            <PhoneLink>{t.contacts.phone}</PhoneLink>
           </p>
         </div>
       )}

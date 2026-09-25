@@ -85,13 +85,16 @@
 }
 
 /* Переключатель языка — сегментированный контрол */
-.lang {
+/* Сегментированный контрол: язык и оформление. Один и тот же
+   элемент для обоих — два соседних переключателя в шапке должны
+   читаться как один приём, а не как две разные придумки. */
+.seg {
   display: inline-flex;
   padding: 3px;
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--content) 7%, transparent);
 }
-.lang__opt {
+.seg__opt {
   min-width: 40px;
   min-height: 32px;
   padding: 0 var(--s-2);
@@ -101,19 +104,59 @@
   color: var(--content-secondary);
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.lang__opt[data-active='true'] {
+.seg__opt--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-width: 34px;
+  padding: 0 var(--s-2);
+}
+.seg__opt[data-active='true'] {
   background: var(--surface);
   color: var(--content);
-  box-shadow: 0 1px 3px rgba(11, 27, 43, 0.12);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--content) 14%, transparent);
 }
+/* Активная тема — акцентной иконкой: из трёх иконок без подписей
+   одной только подложки мало, чтобы выбранное состояние читалось. */
+.seg__opt--icon[data-active='true'] { color: var(--accent); }
+.seg__opt:hover:not([data-active='true']) { color: var(--content); }
 @media (pointer: coarse) {
-  .lang__opt { min-height: 38px; min-width: var(--tap); }
+  .seg__opt { min-height: 38px; min-width: var(--tap); }
+  .seg__opt--icon { min-width: 40px; }
 }
+
+/* На десктопе меню — это строка ссылок, кнопка записи стоит в шапке.
+   Правило должно стоять ДО медиа-запроса: при равной специфичности
+   выигрывает то, что ниже. */
+.nav__cta { display: none; }
+
+/* Оформление живёт в шапке только на десктопе: на узком экране
+   рядом с языком и бургером для него нет честного места, поэтому
+   он уезжает в меню строкой с подписями. */
+.nav__extra { display: none; }
 
 @media (max-width: 56rem) {
   .header__burger { display: grid; }
   .header__cta { display: none; }
   .header__actions { margin-left: auto; }
+  .header__theme { display: none; }
+
+  .nav__extra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-3);
+    margin-top: var(--s-3);
+    padding-top: var(--s-4);
+    border-top: 1px solid var(--hairline);
+  }
+  .nav__extra-label {
+    font-size: var(--text-caption);
+    color: var(--content-secondary);
+  }
+  .nav__extra .seg { flex: 1; }
+  .nav__extra .seg__opt { flex: 1; }
 
   .nav {
     position: absolute;
@@ -127,12 +170,36 @@
     display: none;
   }
   .nav[data-open='true'] { display: block; }
-  .nav__list { flex-direction: column; gap: 0; }
+
+  /* Четыре коротких пункта в одну колонку тратили высоту на пустоту
+     справа. Сетка 2x2 отдаёт ту же навигацию вдвое ниже и читается
+     как осознанная раскладка, а не как сжатый список. */
+  .nav__list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-1);
+  }
   .nav__link {
     width: 100%;
-    min-height: 52px;
-    font-size: var(--text-subtitle);
+    /* 44px — минимум цели нажатия, ниже опускаться нельзя. */
+    min-height: var(--tap);
+    justify-content: flex-start;
+    font-size: var(--text-body);
     border-radius: var(--r-sm);
+    background: var(--surface-raised);
+  }
+
+  /* Главное действие в открытом меню: .header__cta на узком экране
+     скрыт, и до этой кнопки записаться из меню было нельзя. */
+  .nav__cta {
+    display: flex;
+    width: 100%;
+    margin-top: var(--s-3);
+  }
+
+  .nav__extra {
+    margin-top: var(--s-4);
+    padding-top: var(--s-3);
   }
 }
 
@@ -147,6 +214,23 @@
   overflow: hidden;
 }
 .hero .girih { z-index: -1; }
+
+/* Третий слой параллакса: текст не смещается, но к концу экрана
+   мягко уходит. Неподвижная опора, относительно которой видно, что
+   фон отстаёт, а иллюстрация обгоняет. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero__copy {
+      animation: hero-recede linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 30vh 100vh;
+    }
+  }
+}
+
+@keyframes hero-recede {
+  to { opacity: 0.55; }
+}
 
 .hero__grid {
   display: grid;

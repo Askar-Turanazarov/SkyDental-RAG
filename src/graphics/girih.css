@@ -20,13 +20,17 @@
 
 .girih__svg {
   width: 100%;
-  height: 100%;
+  /* Запас по высоте под параллакс: слой сдвигается при прокрутке,
+     и без запаса сверху открылась бы пустота. */
+  height: 130%;
+  transform: translateY(-16%);
 }
 
 .girih__line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 1.25;
+  /* Узор стал плотнее — линия тоньше, иначе пятно тяжелеет. */
+  stroke-width: 1;
   stroke-linejoin: round;
   opacity: 0.32;
 }
@@ -70,8 +74,32 @@
   }
 }
 
-/* Тёмная тема: глазурь светится чуть сильнее на тёмной основе. */
-@media (prefers-color-scheme: dark) {
-  .girih__line { opacity: 0.38; }
-  .girih__glaze { opacity: 0.28; }
+/* Тёмная тема: глазурь светится чуть сильнее на тёмной основе.
+   Селектор по data-theme, а не media: тему выбирает человек. */
+:root[data-theme='dark'] .girih__line { opacity: 0.38; }
+:root[data-theme='dark'] .girih__glaze { opacity: 0.28; }
+
+
+/* ============================================================
+   Параллакс: дальний слой отстаёт от контента.
+
+   Сделано на scroll-driven animations, а не на JS-слушателе
+   прокрутки: браузер считает позицию сам, в потоке композитора,
+   поэтому нет рассинхрона с кадрами и нет работы в главном потоке.
+   Где таймлайнов нет — страница просто остаётся без параллакса,
+   это не деградация, а отсутствие украшения.
+   ============================================================ */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .girih__svg {
+      animation: girih-parallax linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 100vh;
+    }
+  }
+}
+
+@keyframes girih-parallax {
+  from { transform: translateY(-16%); }
+  to { transform: translateY(0%); }
 }

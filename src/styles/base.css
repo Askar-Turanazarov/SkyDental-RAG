@@ -226,3 +226,21 @@ a {
   }
   .btn:active { transform: none; }
 }
+
+/* ---------------- Незаполненные демо-данные ----------------
+   Адрес, телефон и номер лицензии — заглушки до запуска. Пунктир
+   под ними честно говорит «здесь ещё нет настоящего значения»,
+   вместо правдоподобных цифр, которые легко принять за реальные.
+   Курсор help и title объясняют это тем, кто наведёт мышь. */
+[data-placeholder='true'] {
+  color: var(--content-secondary);
+  text-decoration: underline dashed color-mix(in srgb, var(--content) 30%, transparent);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  cursor: help;
+}
+/* Кнопка-заглушка никуда не ведёт, и выглядеть активной не должна. */
+.btn[data-placeholder='true'] {
+  opacity: 0.65;
+  text-decoration: none;
+}

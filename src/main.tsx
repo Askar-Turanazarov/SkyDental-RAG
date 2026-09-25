@@ -7,13 +7,16 @@ import './styles/sections.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { LocaleProvider } from './i18n/LocaleContext'
+import { ThemeProvider } from './theme/ThemeContext'
 import { App } from './App'
 
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <LocaleProvider>
-      <App />
-    </LocaleProvider>
+    <ThemeProvider>
+      <LocaleProvider>
+        <App />
+      </LocaleProvider>
+    </ThemeProvider>
   </StrictMode>,
 )
