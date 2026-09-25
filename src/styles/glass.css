@@ -1,0 +1,77 @@
+/* ============================================================
+   Liquid Glass — ЕДИНСТВЕННОЕ место в проекте, где определено
+   стекло. Если стекло понадобилось где-то ещё, сначала прочитайте
+   .claude/skills/apple-design/references/hig/liquid-glass.md.
+
+   Модель Apple ровно из двух слоёв:
+     1. Контентный слой — текст, карточки, изображения. Без стекла.
+     2. Функциональный слой — то, что плавает над контентом.
+        Только здесь стекло уместно.
+
+   В этом проекте функциональный слой — ровно две поверхности:
+   липкая шапка и панель чат-виджета.
+
+   Числа взяты из liquid-glass.md › Cross-platform translation:
+   blur 20–40px для regular-варианта, заливка 60–80%,
+   saturate 1.2–1.5, волосяная светлая обводка.
+   ============================================================ */
+
+.glass {
+  /* Заливка держит легибельность, даже когда под стеклом
+     проезжает цветной girih-паттерн герой-блока. */
+  background: color-mix(in srgb, var(--surface) var(--glass-fill, 72%), transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--content) 8%, transparent);
+}
+
+/* Scroll edge effect: контент затухает и размывается там, где
+   встречает шапку, вместо того чтобы столкнуться с ней.
+   layout.md › Visual hierarchy прямо требует этого вместо
+   сплошной или полупрозрачной заливки под контролами. */
+.glass-scroll-edge::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: var(--s-5);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--surface) 55%, transparent),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+
+/* ---- Обязательные откаты по состояниям доступности ----
+   liquid-glass.md › Review checklist п.5. Стекло, нарисованное в
+   CSS, само на эти настройки не реагирует — только вручную. */
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--surface);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--hairline-strong);
+  }
+  .glass-scroll-edge::after { display: none; }
+}
+
+@media (prefers-contrast: more) {
+  .glass {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--hairline-strong);
+  }
+  .glass-scroll-edge::after { display: none; }
+}

@@ -1,0 +1,147 @@
+/* ============================================================
+   SkyDental — система токенов
+   Построена по apple-design skill: references/hig/color.md,
+   typography.md, layout.md, accessibility.md, dark-mode.md.
+
+   Палитра взята из узбекской глазурованной майолики (кобальт и
+   бирюза изразцов) — тот же материал, что дентальный фарфор.
+   Контраст посчитан по WCAG из фактических hex, не на глаз.
+   ============================================================ */
+
+:root {
+  /* --- Цвет: светлая тема --- */
+  --surface: #ffffff;
+  --surface-raised: #f5f7fa;
+  --surface-sunken: #eef1f6;
+
+  --content: #0b1b2b;           /* 17.4:1 на --surface ✓ */
+  --content-secondary: #55657a; /*  5.9:1 на --surface ✓ */
+  --content-tertiary: #7b8899;  /*  3.6:1 — только ≥24px и графика */
+
+  --accent: #0b5fd0;            /*  5.9:1 на --surface ✓ кобальт глазури */
+  --accent-hover: #0a52b6;
+  --accent-sunken: #eaf1fd;
+  --on-accent: #ffffff;         /*  5.9:1 на --accent ✓ */
+
+  --glaze: #12a594;             /*  3.1:1 — НЕ для body-текста, см. ниже */
+  --glaze-deep: #0f8375;        /*  4.6:1 на --surface ✓ когда нужен текст */
+
+  --signal: #c4314b;            /*  5.2:1 на --surface ✓ ошибки формы */
+  --signal-sunken: #fdf0f2;
+
+  --hairline: rgba(11, 27, 43, 0.1);
+  --hairline-strong: rgba(11, 27, 43, 0.18);
+
+  /* --- Типографика ---
+     Системный стек: настоящий SF на Apple-устройствах, Segoe UI на
+     Windows. Ноль сетевых запросов, ноль layout shift, полная
+     кириллица (RU) и латиница (UZ). */
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --text-display-xl: clamp(2.5rem, 7vw, 4.75rem); /* 40 → 76px */
+  --text-display-l: clamp(1.875rem, 4.5vw, 3rem); /* 30 → 48px */
+  --text-title: 1.5rem;      /* 24px */
+  --text-subtitle: 1.1875rem;/* 19px */
+  --text-body: 1.0625rem;    /* 17px — мобильный дефолт Apple */
+  --text-caption: 0.875rem;  /* 14px — выше минимума 11pt */
+
+  --tracking-xl: -0.022em;
+  --tracking-l: -0.018em;
+  --tracking-title: -0.01em;
+
+  --leading-tight: 1.08;
+  --leading-snug: 1.25;
+  --leading-body: 1.55;
+
+  /* --- Пространство: шкала на 8 --- */
+  --s-1: 0.25rem;  /*  4 */
+  --s-2: 0.5rem;   /*  8 */
+  --s-3: 0.75rem;  /* 12 */
+  --s-4: 1rem;     /* 16 */
+  --s-5: 1.5rem;   /* 24 */
+  --s-6: 2rem;     /* 32 */
+  --s-7: 3rem;     /* 48 */
+  --s-8: 4rem;     /* 64 */
+  --s-9: 6rem;     /* 96 */
+  --s-10: 8rem;    /* 128 */
+
+  /* --- Форма --- */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-pill: 999px;
+
+  --measure: 1080px;   /* полоса контента */
+  --measure-text: 64ch; /* комфортная длина строки */
+  --gutter: 1.25rem;   /* 20px на мобильном */
+
+  /* --- Цель нажатия: 44px мобильный дефолт Apple --- */
+  --tap: 44px;
+
+  /* --- Тень: сдержанная, «керамика на бумаге» --- */
+  --shadow-card: 0 1px 2px rgba(11, 27, 43, 0.04),
+    0 8px 24px rgba(11, 27, 43, 0.06);
+  --shadow-float: 0 4px 12px rgba(11, 27, 43, 0.1),
+    0 16px 48px rgba(11, 27, 43, 0.14);
+
+  /* --- Движение --- */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1); /* Apple-подобный выход */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 160ms;
+  --dur-base: 280ms;
+  --dur-slow: 560ms;
+
+  color-scheme: light dark;
+}
+
+/* --- Цвет: тёмная тема ---
+   Смягчённые белые, не чистый чёрный (dark-mode.md).
+   Собственного переключателя темы нет: следуем системе. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #0a1420;
+    --surface-raised: #121e2d;
+    --surface-sunken: #060d16;
+
+    --content: #e8edf3;           /* 15.8:1 ✓ */
+    --content-secondary: #9fb0c4; /*  8.4:1 ✓ */
+    --content-tertiary: #76889d;  /*  5.0:1 ✓ */
+
+    --accent: #5ea8ff;            /*  7.4:1 ✓ */
+    --accent-hover: #86bdff;
+    --accent-sunken: #14273f;
+    --on-accent: #06182e;         /*  7.0:1 на --accent ✓ */
+
+    --glaze: #2fd3be;
+    --glaze-deep: #5ee3d1;
+
+    --signal: #ff8a9b;            /*  8.1:1 ✓ */
+    --signal-sunken: #2a1620;
+
+    --hairline: rgba(232, 237, 243, 0.12);
+    --hairline-strong: rgba(232, 237, 243, 0.22);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Увеличенный контраст: усиливаем волосяные линии и убираем
+   третичный уровень как носитель смысла (accessibility.md). */
+@media (prefers-contrast: more) {
+  :root {
+    --content-secondary: #3d4c5e;
+    --content-tertiary: #55657a;
+    --hairline: rgba(11, 27, 43, 0.3);
+    --hairline-strong: rgba(11, 27, 43, 0.5);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --content-secondary: #c9d6e4;
+      --content-tertiary: #9fb0c4;
+      --hairline: rgba(232, 237, 243, 0.35);
+      --hairline-strong: rgba(232, 237, 243, 0.55);
+    }
+  }
+}

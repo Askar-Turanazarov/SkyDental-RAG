@@ -1,0 +1,77 @@
+/* ============================================================
+   Girih-узор — контентный слой. Никакого стекла.
+
+   Единственный поставленный момент движения на всей странице:
+   изразцы проявляются волной один раз при загрузке (~1.3 с всего),
+   затем узор в покое. references/hig/motion.md: движение
+   осмысленное, короткое и редкое.
+   ============================================================ */
+
+.girih {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Лёгкая «глазурная» подложка: узор лежит на цвете, а не на пустоте. */
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    radial-gradient(80% 70% at 30% 10%, color-mix(in srgb, var(--glaze) 8%, transparent), transparent 70%);
+}
+
+.girih__svg {
+  width: 100%;
+  height: 100%;
+}
+
+.girih__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  opacity: 0.32;
+}
+
+.girih__glaze {
+  fill: var(--glaze);
+  opacity: 0.22;
+}
+
+.girih__tie {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0.18;
+}
+
+/* --- Поставленный момент --- */
+.girih__tile {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: girih-settle 620ms var(--ease-out) forwards;
+  animation-delay: var(--girih-delay, 0ms);
+}
+
+@keyframes girih-settle {
+  from {
+    opacity: 0;
+    scale: 0.86;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Уменьшение движения: узор сразу в финальном состоянии. */
+@media (prefers-reduced-motion: reduce) {
+  .girih__tile {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* Тёмная тема: глазурь светится чуть сильнее на тёмной основе. */
+@media (prefers-color-scheme: dark) {
+  .girih__line { opacity: 0.38; }
+  .girih__glaze { opacity: 0.28; }
+}
