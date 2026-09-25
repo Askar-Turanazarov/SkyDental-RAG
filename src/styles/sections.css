@@ -196,7 +196,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
   align-items: center;
-  gap: var(--s-7);
+  gap: clamp(var(--s-7), 5vw, var(--s-9));
 }
 
 .hero__title {
@@ -213,7 +213,7 @@
 
 .hero__lede {
   margin-top: var(--s-5);
-  max-width: 34rem;
+  max-width: 36rem;
   font-size: var(--text-subtitle);
   color: var(--content-secondary);
 }
@@ -256,7 +256,7 @@
 }
 .crown {
   width: 100%;
-  max-width: 360px;
+  max-width: clamp(300px, 28vw, 440px);
   height: auto;
   filter: drop-shadow(0 24px 40px color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -277,9 +277,12 @@
 }
 
 /* ---------------- Услуги ---------------- */
+/* Шесть карточек: 3 × 2 на десктопе, 2 × 3 на планшете, столбик на
+   телефоне. Колонка не уже трети ряда, поэтому четвёртой не бывает
+   даже в широкой полосе: иначе остался бы «хвост» из двух карточек. */
 .services {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(300px, (100% - 2 * var(--s-4)) / 3)), 1fr));
   gap: var(--s-4);
   margin-top: var(--s-7);
 }

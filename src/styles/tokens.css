@@ -39,10 +39,12 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-  --text-display-xl: clamp(2.5rem, 7vw, 4.75rem); /* 40 → 76px */
-  --text-display-l: clamp(1.875rem, 4.5vw, 3rem); /* 30 → 48px */
-  --text-title: 1.5rem;      /* 24px */
-  --text-subtitle: 1.1875rem;/* 19px */
+  /* Заголовки растут с шириной окна плавно, без ступенек на брейкпоинтах:
+     в широкой полосе контента мелкий заголовок теряется. */
+  --text-display-xl: clamp(2.5rem, 1.6rem + 3.6vw, 5rem);     /* 40 → 80px */
+  --text-display-l: clamp(1.875rem, 1.3rem + 2.2vw, 3.25rem); /* 30 → 52px */
+  --text-title: clamp(1.5rem, 1.3rem + 0.5vw, 1.75rem);       /* 24 → 28px */
+  --text-subtitle: clamp(1.1875rem, 1.1rem + 0.3vw, 1.3125rem); /* 19 → 21px */
   --text-body: 1.0625rem;    /* 17px — мобильный дефолт Apple */
   --text-caption: 0.875rem;  /* 14px — выше минимума 11pt */
 
@@ -72,9 +74,14 @@
   --r-lg: 24px;
   --r-pill: 999px;
 
-  --measure: 1080px;   /* полоса контента */
-  --measure-text: 64ch; /* комфортная длина строки */
-  --gutter: 1.25rem;   /* 20px на мобильном */
+  /* Полоса контента. .shell — это max-width с полями внутри, поэтому
+     на экранах уже 1320px страница занимает всю ширину окна минус поля.
+     На больших мониторах полоса растёт до 1560px (75% окна), чтобы
+     по бокам не оставались пустые поля в треть экрана. Абзацы при
+     этом не растягиваются: их держит --measure-text. */
+  --measure: clamp(1320px, 75vw, 1560px);
+  --measure-text: 64ch; /* комфортная длина строки абзаца */
+  --gutter: clamp(1.25rem, 4vw, 3rem); /* 20px на телефоне → 48px на десктопе */
 
   /* --- Цель нажатия: 44px мобильный дефолт Apple --- */
   --tap: 44px;
