@@ -1,0 +1,103 @@
+{
+  "$comment": "Эталонный набор для npm run eval. topics — тема → подписи источника в RU и UZ версиях базы (поиск оставляет одну копию факта, поэтому подходит любая). cases.expect — список тем, любая из которых считается попаданием. expectRefusal — вопрос вне базы, бот должен честно отказаться. group: ru, uz — прямые вопросы; cross — язык вопроса не совпадает с языком сайта; followup — вопрос понятен только с историей; out — вне базы.",
+
+  "topics": {
+    "faq/booking": ["FAQ · Как записаться на приём", "Savol-javob · Qabulga qanday yozilish mumkin"],
+    "faq/advance": ["FAQ · За сколько дней нужно записываться", "Savol-javob · Necha kun oldin yozilish kerak"],
+    "faq/reschedule": ["FAQ · Можно ли перенести или отменить запись", "Savol-javob · Yozuvni koʻchirish yoki bekor qilish mumkinmi"],
+    "faq/payment": ["FAQ · Как можно оплатить", "Savol-javob · Qanday toʻlash mumkin"],
+    "faq/installments": ["FAQ · Есть ли рассрочка", "Savol-javob · Boʻlib toʻlash bormi"],
+    "faq/warranty": ["FAQ · Что входит в гарантию", "Savol-javob · Kafolatga nima kiradi"],
+    "faq/first-visit": ["FAQ · Что взять с собой на первый приём", "Savol-javob · Birinchi qabulga nima olib borish kerak"],
+    "faq/prepare": ["FAQ · Как подготовиться к приёму", "Savol-javob · Qabulga qanday tayyorlanish kerak"],
+    "faq/pain": ["FAQ · Больно ли лечить", "Savol-javob · Davolash ogʻriydimi"],
+    "faq/duration": ["FAQ · Сколько длится приём", "Savol-javob · Qabul qancha davom etadi"],
+    "faq/same-day-crown": ["FAQ · Правда ли коронку делают за один приём", "Savol-javob · Toj rostdan bir tashrifda tayyorlanadimi"],
+    "faq/kids": ["FAQ · Работаете ли вы с детьми", "Savol-javob · Bolalar bilan ishlaysizmi"],
+    "faq/crown-life": ["FAQ · Сколько служит коронка", "Savol-javob · Toj qancha xizmat qiladi"],
+    "faq/parking": ["FAQ · Где припарковаться", "Savol-javob · Mashinani qayerga qoʻyish mumkin"],
+
+    "prices/consultation": ["Прайс-лист · Консультация и план лечения", "Narxlar roʻyxati · Konsultatsiya va davolash rejasi"],
+    "prices/ct": ["Прайс-лист · Компьютерная томография", "Narxlar roʻyxati · Kompyuter tomografiyasi"],
+    "prices/hygiene": ["Прайс-лист · Профессиональная гигиена", "Narxlar roʻyxati · Professional gigiyena"],
+    "prices/canals": ["Прайс-лист · Лечение каналов", "Narxlar roʻyxati · Kanallarni davolash"],
+    "prices/extraction": ["Прайс-лист · Удаление зуба", "Narxlar roʻyxati · Tish olish"],
+    "prices/implant": ["Прайс-лист · Имплантация одного зуба", "Narxlar roʻyxati · Bitta tish implantatsiyasi"],
+    "prices/implant-crown": ["Прайс-лист · Коронка на имплант", "Narxlar roʻyxati · Implant ustiga toj"],
+    "prices/veneer": ["Прайс-лист · Керамический винир", "Narxlar roʻyxati · Keramika vinir"],
+    "prices/aligners": ["Прайс-лист · Прозрачные алайнеры", "Narxlar roʻyxati · Shaffof aylanerlar"],
+    "prices/braces": ["Прайс-лист · Брекет-система", "Narxlar roʻyxati · Breket tizimi"],
+    "prices/whitening": ["Прайс-лист · Кабинетное отбеливание", "Narxlar roʻyxati · Kabinetda oqartirish"],
+    "prices/kids": ["Прайс-лист · Детский приём", "Narxlar roʻyxati · Bolalar qabuli"],
+    "prices/installments": ["Прайс-лист · Рассрочка", "Narxlar roʻyxati · Boʻlib toʻlash"],
+
+    "schedule/hours": ["График работы · Часы работы и приёма", "Ish jadvali · Ish vaqti va qabul soatlari"],
+    "schedule/address": ["График работы · Адрес", "Ish jadvali · Manzil"],
+    "schedule/phone": ["График работы · Телефон для записи", "Ish jadvali · Yozilish uchun telefon"],
+    "schedule/messengers": ["График работы · Мессенджеры и соцсети", "Ish jadvali · Messenjerlar va ijtimoiy tarmoqlar"],
+    "schedule/emergency": ["График работы · Экстренные случаи", "Ish jadvali · Shoshilinch holatlar"]
+  },
+
+  "cases": [
+    { "id": "ru-implant", "group": "ru", "locale": "ru", "question": "Сколько стоит имплантация зуба?", "expect": ["prices/implant"] },
+    { "id": "ru-cleaning", "group": "ru", "locale": "ru", "question": "Какая цена профессиональной чистки зубов?", "expect": ["prices/hygiene"] },
+    { "id": "ru-saturday", "group": "ru", "locale": "ru", "question": "Во сколько вы открываетесь в субботу?", "expect": ["schedule/hours"] },
+    { "id": "ru-where", "group": "ru", "locale": "ru", "question": "Где вы находитесь?", "expect": ["schedule/address"] },
+    { "id": "ru-humo", "group": "ru", "locale": "ru", "question": "Можно ли оплатить картой Humo?", "expect": ["faq/payment"] },
+    { "id": "ru-braces-credit", "group": "ru", "locale": "ru", "question": "Брекеты можно взять в рассрочку?", "expect": ["faq/installments", "prices/installments", "prices/braces"] },
+    { "id": "ru-filling-pain", "group": "ru", "locale": "ru", "question": "Больно ли ставить пломбу?", "expect": ["faq/pain"] },
+    { "id": "ru-kids", "group": "ru", "locale": "ru", "question": "Принимаете маленьких детей?", "expect": ["faq/kids", "prices/kids"] },
+    { "id": "ru-night-pain", "group": "ru", "locale": "ru", "question": "Что делать, если ночью сильно разболелся зуб?", "expect": ["schedule/emergency"] },
+    { "id": "ru-ct", "group": "ru", "locale": "ru", "question": "Сколько стоит компьютерная томография?", "expect": ["prices/ct"] },
+    { "id": "ru-car", "group": "ru", "locale": "ru", "question": "Где оставить машину, когда приеду?", "expect": ["faq/parking"] },
+    { "id": "ru-warranty", "group": "ru", "locale": "ru", "question": "Какая гарантия на коронки?", "expect": ["faq/warranty"] },
+    { "id": "ru-first-visit", "group": "ru", "locale": "ru", "question": "Что нужно взять с собой на первую консультацию?", "expect": ["faq/first-visit"] },
+    { "id": "ru-whitening", "group": "ru", "locale": "ru", "question": "Сколько стоит отбеливание?", "expect": ["prices/whitening"] },
+    { "id": "ru-cancel", "group": "ru", "locale": "ru", "question": "Как отменить запись?", "expect": ["faq/reschedule"] },
+
+    { "id": "uz-implant", "group": "uz", "locale": "uz", "question": "Implant qancha turadi?", "expect": ["prices/implant"] },
+    { "id": "uz-saturday", "group": "uz", "locale": "uz", "question": "Shanba kuni ishlaysizmi?", "expect": ["schedule/hours"] },
+    { "id": "uz-where", "group": "uz", "locale": "uz", "question": "Manzilingiz qayerda?", "expect": ["schedule/address"] },
+    { "id": "uz-canals", "group": "uz", "locale": "uz", "question": "Kanal davolash narxi qancha?", "expect": ["prices/canals"] },
+    { "id": "uz-kids", "group": "uz", "locale": "uz", "question": "Bolalarni qabul qilasizmi?", "expect": ["faq/kids", "prices/kids"] },
+    { "id": "uz-braces-apostrophe", "group": "uz", "locale": "uz", "question": "Breket qo'yish narxi qancha?", "expect": ["prices/braces"] },
+    { "id": "uz-extraction", "group": "uz", "locale": "uz", "question": "Tish oldirish qancha turadi?", "expect": ["prices/extraction"] },
+    { "id": "uz-telegram", "group": "uz", "locale": "uz", "question": "Telegram orqali yozilsa bo'ladimi?", "expect": ["faq/booking", "schedule/messengers", "schedule/phone"] },
+
+    { "id": "cross-en-implant", "group": "cross", "locale": "ru", "question": "How much is a dental implant?", "expect": ["prices/implant"] },
+    { "id": "cross-ru-aligners", "group": "cross", "locale": "uz", "question": "Сколько стоят элайнеры?", "expect": ["prices/aligners"] },
+    { "id": "cross-uz-veneer", "group": "cross", "locale": "ru", "question": "Vinir narxi qancha?", "expect": ["prices/veneer"] },
+    { "id": "cross-en-hours", "group": "cross", "locale": "uz", "question": "What are your opening hours on Sunday?", "expect": ["schedule/hours"] },
+
+    {
+      "id": "followup-implant-crown", "group": "followup", "locale": "ru",
+      "history": [
+        { "role": "user", "text": "Сколько стоит имплантация?" },
+        { "role": "assistant", "text": "Имплантация одного зуба — от 6 500 000 сум [1]." }
+      ],
+      "question": "А коронка на него сколько?", "expect": ["prices/implant-crown"]
+    },
+    {
+      "id": "followup-hygiene-time", "group": "followup", "locale": "uz",
+      "history": [
+        { "role": "user", "text": "Gigiyena qancha turadi?" },
+        { "role": "assistant", "text": "Professional gigiyena — 650 000 soʻm [1]." }
+      ],
+      "question": "U qancha vaqt oladi?", "expect": ["faq/duration", "prices/hygiene"]
+    },
+    {
+      "id": "followup-saturday-address", "group": "followup", "locale": "ru",
+      "history": [
+        { "role": "user", "text": "Вы работаете в субботу?" },
+        { "role": "assistant", "text": "Да, в субботу — 09:00–20:00, выходной только воскресенье [1]." }
+      ],
+      "question": "А куда ехать?", "expect": ["schedule/address"]
+    },
+
+    { "id": "out-dollar", "group": "out", "locale": "ru", "question": "Какой сегодня курс доллара?", "expectRefusal": true },
+    { "id": "out-plov", "group": "out", "locale": "ru", "question": "Посоветуй рецепт плова", "expectRefusal": true },
+    { "id": "out-weather", "group": "out", "locale": "uz", "question": "Ertaga Toshkentda ob-havo qanday bo'ladi?", "expectRefusal": true },
+    { "id": "out-rhinoplasty", "group": "out", "locale": "ru", "question": "Делаете ли вы пластику носа?", "expectRefusal": true },
+    { "id": "out-eye-doctor", "group": "out", "locale": "uz", "question": "Koʻz shifokori qabul qiladimi?", "expectRefusal": true }
+  ]
+}

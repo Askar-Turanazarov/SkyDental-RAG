@@ -5,6 +5,7 @@ import type {
   Attempt,
   ChatEvent,
   ChatRequest,
+  ChatTurn,
   RefusalReason,
   RetrievalInfo,
 } from '../../shared/protocol.js'
@@ -29,6 +30,26 @@ import { retrieve } from './retrieve.js'
    ============================================================ */
 
 export type Emit = (ev: ChatEvent) => Promise<void>
+
+/** Цепочка без офлайн-заглушки local: служебным шагам нужна настоящая модель. */
+export const realChain = chain.filter((e) => e.provider !== 'local' && providers.has(e.provider))
+
+/**
+ * Шаг condense: follow-up → самостоятельный вопрос.
+ * null — переписывать нечего (нет истории), некем (нет настоящей
+ * модели) или модель вернула тот же вопрос.
+ */
+export async function condenseQuestion(question: string, history: ChatTurn[], signal?: AbortSignal): Promise<string | null> {
+  if (!history.some((t) => t.role === 'user') || !realChain.length) return null
+  try {
+    const res = await generateText({ ...condenseRequest(question, history), signal }, realChain)
+    const text = res.text.trim().replace(/^["«]|["»]$/g, '')
+    return text && text.toLowerCase() !== question.trim().toLowerCase() ? text : null
+  } catch {
+    // Не смогли переформулировать — ищем по исходному вопросу.
+    return null
+  }
+}
 
 interface Context {
   ipHash: string | null
@@ -75,21 +96,10 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   }
 
   /* ---------- 1. condense ---------- */
-  let searchQuery = req.question
-  let condensed: string | null = null
-  const realChain = chain.filter((e) => e.provider !== 'local' && providers.has(e.provider))
-  if (req.history.some((t) => t.role === 'user') && realChain.length) {
-    try {
-      const res = await generateText({ ...condenseRequest(req.question, req.history), signal: ctx.signal }, realChain)
-      const text = res.text.trim().replace(/^["«]|["»]$/g, '')
-      if (text && text.toLowerCase() !== req.question.trim().toLowerCase()) {
-        condensed = text
-        searchQuery = text
-      }
-    } catch {
-      // Не смогли переформулировать — ищем по исходному вопросу.
-    }
-  }
+  const condensed = await condenseQuestion(req.question, req.history, ctx.signal)
+  // Дальше — и в поиск, и в промпт — идёт самостоятельный вопрос:
+  // истории диалога модель в промпте не видит.
+  const searchQuery = condensed ?? req.question
 
   /* ---------- 2. retrieve ---------- */
   try {
@@ -148,7 +158,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
 
   let res
   try {
-    res = await streamWithFallback({ ...ragRequest(req.question, req.locale, retrieval.chunks), signal: ctx.signal }, onText)
+    res = await streamWithFallback({ ...ragRequest(searchQuery, req.locale, retrieval.chunks), signal: ctx.signal }, onText)
   } catch (err) {
     await fail(err, emit, ctx, req, retrieval)
     return

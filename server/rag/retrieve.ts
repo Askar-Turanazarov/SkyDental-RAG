@@ -52,16 +52,21 @@ export async function retrieve(question: string, locale: Locale, topK = env.RAG_
 
   const [queryVector] = await embedProvider().embed!(env.EMBED_MODEL, [question], 'query')
   const cols = 'c.id, c.locale, c.ord, d.slug, d.is_price, c.source_label, c.text'
+  // Нулевой вектор (у офлайн-заглушки — вопрос без единого слова,
+  // например «???») ни на что не похож: косинус с ним не определён.
+  const hasVector = queryVector.some((x) => x !== 0)
 
   const [vecRows, textRows] = await Promise.all([
-    db.query<Row>(
-      `select ${cols}, 1 - (c.embedding <=> $1::vector) as score
-       from chunks c join documents d on d.id = c.document_id
-       where c.embedding is not null and c.embed_model = $2
-       order by c.embedding <=> $1::vector
-       limit ${LEG_LIMIT}`,
-      [toVectorLiteral(queryVector), embedModelLabel],
-    ),
+    hasVector
+      ? db.query<Row>(
+          `select ${cols}, 1 - (c.embedding <=> $1::vector) as score
+           from chunks c join documents d on d.id = c.document_id
+           where c.embedding is not null and c.embed_model = $2
+           order by c.embedding <=> $1::vector
+           limit ${LEG_LIMIT}`,
+          [toVectorLiteral(queryVector), embedModelLabel],
+        )
+      : Promise.resolve([] as Row[]),
     terms.length
       ? db.query<Row>(
           `select ${cols}, ts_rank_cd(c.tsv, q) as score

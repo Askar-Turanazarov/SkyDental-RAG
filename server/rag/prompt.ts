@@ -42,15 +42,19 @@ const LABELS: Record<Locale, { context: string; question: string }> = {
   uz: { context: 'Bilimlar bazasi parchalari:', question: 'Savol' },
 }
 
-export function ragRequest(question: string, locale: Locale, chunks: RetrievedChunk[]): GenerateRequest {
-  const context = chunks
+/** Куски, вошедшие в промпт, — пронумерованные, с подписью источника. */
+export function formatContext(chunks: RetrievedChunk[]): string {
+  return chunks
     .filter((c) => c.n !== null)
     .map((c) => `[${c.n}] (${c.source})\n${c.text}`)
     .join('\n\n')
+}
+
+export function ragRequest(question: string, locale: Locale, chunks: RetrievedChunk[]): GenerateRequest {
   const l = LABELS[locale]
   return {
     system: SYSTEM_RAG[locale],
-    messages: [{ role: 'user', text: `${l.context}\n\n${context}\n\n${l.question}: ${question}` }],
+    messages: [{ role: 'user', text: `${l.context}\n\n${formatContext(chunks)}\n\n${l.question}: ${question}` }],
     temperature: 0.2,
     maxTokens: 700,
   }
