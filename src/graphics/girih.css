@@ -1,35 +1,64 @@
 /* ============================================================
-   Girih-узор — контентный слой. Никакого стекла.
+   Girih-узор — контентный слой под всей страницей. Никакого стекла.
 
-   Единственный поставленный момент движения на всей странице:
-   изразцы проявляются волной один раз при загрузке (~1.3 с всего),
-   затем узор в покое. references/hig/motion.md: движение
-   осмысленное, короткое и редкое.
+   Три вложенных слоя, у каждого одна задача:
+   .girih        — во всю высоту документа, за контентом (#root в
+                   base.css — точка отсчёта). «Волна» появления.
+   .girih__mask  — сила узора в координатах документа: под героем
+                   полная, ниже — лёгкая фактура. Едет вместе с
+                   текстом, поэтому яркая зона уходит с героем.
+   .girih__layer — сами плитки. Почти стоят при прокрутке: дальний
+                   план параллакса.
    ============================================================ */
 
 .girih {
   position: absolute;
   inset: 0;
+  z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  /* Лёгкая «глазурная» подложка: узор лежит на цвете, а не на пустоте. */
+}
+
+.girih__mask {
+  /* Сила узора ниже героя — доля от полной. Итоговая заметность
+     линии ≈ 6% в светлой теме и ≈ 7% в тёмной: фактура, которую
+     видно, но которая не лезет под текст. */
+  --girih-floor: 0.2;
+
+  position: absolute;
+  inset: 0;
+  /* Лёгкая «глазурная» подложка под героем: узор лежит на цвете,
+     а не на пустоте. Размеры в vh: слой длиной во весь документ. */
   background:
-    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
-    radial-gradient(80% 70% at 30% 10%, color-mix(in srgb, var(--glaze) 8%, transparent), transparent 70%);
+    radial-gradient(120% 100vh at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    radial-gradient(80% 75vh at 30% 10vh, color-mix(in srgb, var(--glaze) 8%, transparent), transparent 70%);
+  /* Две маски складываются (mask-composite: add по умолчанию):
+     1) эллипс из левого верхнего угла — полная сила под заголовком,
+        затухание вправо (там коронка) и вниз, к концу героя;
+     2) ровный «пол» на всю страницу. */
+  -webkit-mask-image:
+    radial-gradient(135% 125vh at 0 0, #000 30%, rgb(0 0 0 / 0.55) 55%, transparent 100%),
+    linear-gradient(rgb(0 0 0 / var(--girih-floor)), rgb(0 0 0 / var(--girih-floor)));
+  mask-image:
+    radial-gradient(135% 125vh at 0 0, #000 30%, rgb(0 0 0 / 0.55) 55%, transparent 100%),
+    linear-gradient(rgb(0 0 0 / var(--girih-floor)), rgb(0 0 0 / var(--girih-floor)));
+}
+
+.girih__layer {
+  position: absolute;
+  inset: 0;
 }
 
 .girih__svg {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  /* Запас по высоте под параллакс: слой сдвигается при прокрутке,
-     и без запаса сверху открылась бы пустота. */
-  height: 130%;
-  transform: translateY(-16%);
+  height: 100%;
 }
 
 .girih__line {
   fill: none;
   stroke: var(--accent);
-  /* Узор стал плотнее — линия тоньше, иначе пятно тяжелеет. */
   stroke-width: 1;
   stroke-linejoin: round;
   opacity: 0.32;
@@ -41,65 +70,80 @@
 }
 
 .girih__tie {
+  fill: none;
   stroke: var(--accent);
   stroke-width: 1;
   opacity: 0.18;
 }
 
-/* --- Поставленный момент --- */
-.girih__tile {
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: girih-settle 620ms var(--ease-out) forwards;
-  animation-delay: var(--girih-delay, 0ms);
-}
-
-@keyframes girih-settle {
-  from {
-    opacity: 0;
-    scale: 0.86;
-  }
-  to {
-    opacity: 1;
-    scale: 1;
-  }
-}
-
-/* Уменьшение движения: узор сразу в финальном состоянии. */
-@media (prefers-reduced-motion: reduce) {
-  .girih__tile {
-    opacity: 1;
-    animation: none;
-  }
-}
-
-/* Тёмная тема: глазурь светится чуть сильнее на тёмной основе.
+/* Тёмная тема: глазурь светится чуть сильнее на тёмной основе, а пол
+   чуть ниже — светлые линии на тёмном заметнее тёмных на светлом.
    Селектор по data-theme, а не media: тему выбирает человек. */
+:root[data-theme='dark'] .girih__mask { --girih-floor: 0.18; }
 :root[data-theme='dark'] .girih__line { opacity: 0.38; }
 :root[data-theme='dark'] .girih__glaze { opacity: 0.28; }
 
 
 /* ============================================================
-   Параллакс: дальний слой отстаёт от контента.
+   Поставленный момент: изразцы проявляются волной от левого
+   верхнего угла один раз при загрузке (~1.4 с), затем узор в покое.
+   references/hig/motion.md: движение осмысленное, короткое и редкое.
+
+   Волна — круглая маска, которая растёт из угла. Маска живёт только
+   в ключевых кадрах: после анимации её нет, узор виден целиком.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  .girih {
+    animation: girih-reveal 1400ms var(--ease-out);
+  }
+}
+
+@keyframes girih-reveal {
+  from,
+  to {
+    -webkit-mask-image: radial-gradient(circle at 0 0, #000 55%, transparent 70.7%);
+    mask-image: radial-gradient(circle at 0 0, #000 55%, transparent 70.7%);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+  from {
+    -webkit-mask-size: 0 0;
+    mask-size: 0 0;
+  }
+  to {
+    /* Квадрат 190vmax: полная сила маски — до 148vmax от угла, это
+       больше диагонали экрана. Снятие маски в конце незаметно. */
+    -webkit-mask-size: 190vmax 190vmax;
+    mask-size: 190vmax 190vmax;
+  }
+}
+
+
+/* ============================================================
+   Параллакс: плитки движутся со скоростью 0.15 от прокрутки.
+
+   Слой лежит в документе и сам бы ехал вместе с текстом. За всю
+   прокрутку (высота документа минус экран) он съезжает вниз на 85%
+   этого пути: calc(85% − 85vh), где 85% — от собственной высоты
+   слоя, то есть документа. Остаётся 15% — видимая скорость узора.
+   Сдвиг всегда меньше прокрутки, поэтому сверху пустота не
+   открывается, а лишний низ обрезает .girih.
 
    Сделано на scroll-driven animations, а не на JS-слушателе
    прокрутки: браузер считает позицию сам, в потоке композитора,
    поэтому нет рассинхрона с кадрами и нет работы в главном потоке.
-   Где таймлайнов нет — страница просто остаётся без параллакса,
-   это не деградация, а отсутствие украшения.
+   Где таймлайнов нет (Firefox) — фон просто едет с текстом, это не
+   деградация, а отсутствие украшения.
    ============================================================ */
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
-    .girih__svg {
+    .girih__layer {
       animation: girih-parallax linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 100vh;
     }
   }
 }
 
 @keyframes girih-parallax {
-  from { transform: translateY(-16%); }
-  to { transform: translateY(0%); }
+  to { transform: translateY(calc(85% - 85vh)); }
 }

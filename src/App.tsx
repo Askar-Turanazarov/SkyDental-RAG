@@ -7,6 +7,7 @@ import { Faq } from './components/Faq'
 import { Contacts } from './components/Contacts'
 import { Footer } from './components/Footer'
 import { ChatWidget } from './components/chat/ChatWidget'
+import { GirihPattern } from './graphics/GirihPattern'
 
 export function App() {
   const t = useT()
@@ -16,6 +17,8 @@ export function App() {
       <a className="skip-link" href="#main">
         {t.nav.skipToContent}
       </a>
+      {/* Фон во всю высоту страницы: ярко под героем, фактурой ниже. */}
+      <GirihPattern />
       <Header />
       <main id="main" tabIndex={-1}>
         <Hero />

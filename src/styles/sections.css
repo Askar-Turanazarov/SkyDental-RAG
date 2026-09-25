@@ -2,7 +2,10 @@
    Раскладка секций. Контентный слой: стекла здесь нет.
    ============================================================ */
 
-.section--raised { background: var(--surface-raised); }
+/* Приподнятая секция — полупрозрачная вуаль, а не сплошная заливка:
+   фактура girih под страницей просвечивает и здесь. По тону это тот же
+   --surface-raised: 4% цвета текста поверх фона. */
+.section--raised { background: color-mix(in srgb, var(--content) 4%, transparent); }
 
 .dot {
   width: 8px;
@@ -25,6 +28,43 @@
   align-items: center;
   gap: var(--s-5);
   min-height: 64px;
+}
+
+/* Шапка «садится» за первые 96px прокрутки: ниже на 8px, стекло
+   плотнее, снизу мягкая тень — как навигация в iOS, которая из
+   прозрачной над заголовком становится панелью над контентом.
+   Высоту полосы шапка отдаёт в нижний отступ, поэтому общий поток не
+   меняется и текст под ней не дёргается. --glass-fill зарегистрирован
+   как процент, иначе браузер не смог бы его плавно интерполировать. */
+@property --glass-fill {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 72%;
+}
+
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .header,
+    .header__bar {
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 96px;
+    }
+    .header { animation-name: header-settle; }
+    .header__bar { animation-name: header-condense; }
+  }
+}
+
+@keyframes header-settle {
+  to {
+    --glass-fill: 84%;
+    margin-bottom: 8px;
+    box-shadow: 0 10px 28px -18px color-mix(in srgb, var(--content) 45%, transparent);
+  }
+}
+@keyframes header-condense {
+  to { min-height: 56px; }
 }
 
 .brand {
@@ -173,7 +213,26 @@
   padding-bottom: var(--s-9);
   overflow: hidden;
 }
-.hero .girih { z-index: -1; }
+
+/* Загрузка: строки героя поднимаются по очереди, сверху вниз —
+   так читают и глаза. Всё укладывается в ~1 с, вместе с волной узора
+   и прорисовкой коронки: один поставленный момент, а не три. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero__copy > .eyebrow,
+  .hero__line,
+  .hero__lede,
+  .hero__ctas,
+  .trust {
+    animation: rise 700ms var(--ease-out) both;
+  }
+  .hero__copy > .eyebrow { animation-delay: 60ms; }
+  .hero__line:nth-child(1) { animation-delay: 140ms; }
+  .hero__line:nth-child(2) { animation-delay: 220ms; }
+  .hero__line:nth-child(n + 3) { animation-delay: 300ms; }
+  .hero__lede { animation-delay: 400ms; }
+  .hero__ctas { animation-delay: 480ms; }
+  .trust { animation-delay: 560ms; }
+}
 
 /* Третий слой параллакса: текст не смещается, но к концу экрана
    мягко уходит. Неподвижная опора, относительно которой видно, что
@@ -463,6 +522,38 @@
   color: var(--content-secondary);
 }
 
+/* Ответ раскрывается по высоте, а не появляется скачком. Раньше
+   высоту до auto анимировали только через JS или max-height; теперь
+   interpolate-size разрешает переход к auto, а ::details-content даёт
+   доступ к той части <details>, которая прячется. Закрытие тоже
+   плавное: content-visibility с allow-discrete держит ответ видимым,
+   пока высота не дойдёт до нуля. Где этого нет — открывается сразу,
+   как раньше. Вопросы связаны name="faq": открытый ответ сворачивается,
+   пока раскрывается новый, — оба движения одновременно. */
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    .faq { interpolate-size: allow-keywords; }
+    .faq__item::details-content {
+      block-size: 0;
+      overflow-y: clip;
+      transition:
+        block-size var(--dur-slow) var(--ease-out),
+        content-visibility var(--dur-slow) allow-discrete;
+    }
+    .faq__item[open]::details-content { block-size: auto; }
+    /* Текст ответа проявляется чуть позже, чем начинает расти высота.
+       Анимация, а не transition: пока <details> закрыт, браузер не
+       считает стили его содержимого, и переходу не от чего стартовать. */
+    .faq__item[open] .faq__a {
+      animation: faq-answer-in var(--dur-base) var(--ease-out) 80ms both;
+    }
+  }
+}
+
+@keyframes faq-answer-in {
+  from { opacity: 0; }
+}
+
 /* ---------------- Контакты ---------------- */
 .contacts {
   display: grid;
@@ -597,7 +688,7 @@
 /* ---------------- Подвал ---------------- */
 .footer {
   padding-block: var(--s-8) var(--s-6);
-  background: var(--surface);
+  /* Без заливки: фактура girih доходит до самого низа страницы. */
   border-top: 1px solid var(--hairline);
   font-size: var(--text-caption);
   color: var(--content-secondary);

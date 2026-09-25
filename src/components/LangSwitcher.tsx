@@ -1,5 +1,6 @@
 import { useLocale, useT } from '../i18n/LocaleContext'
 import type { Locale } from '../i18n/types'
+import { useSegThumb } from './useSegThumb'
 
 const OPTIONS: { value: Locale; short: string; full: string }[] = [
   { value: 'ru', short: 'RU', full: 'Русский' },
@@ -18,9 +19,10 @@ const OPTIONS: { value: Locale; short: string; full: string }[] = [
 export function LangSwitcher() {
   const { locale, setLocale } = useLocale()
   const t = useT()
+  const ref = useSegThumb<HTMLDivElement>(locale)
 
   return (
-    <div className="seg" role="radiogroup" aria-label={t.nav.langLabel}>
+    <div ref={ref} className="seg" role="radiogroup" aria-label={t.nav.langLabel}>
       {OPTIONS.map((opt) => {
         const active = opt.value === locale
         return (

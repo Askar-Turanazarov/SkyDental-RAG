@@ -1,15 +1,13 @@
 import { useT } from '../i18n/LocaleContext'
-import { GirihPattern } from '../graphics/GirihPattern'
 import { CrownSvg } from '../graphics/CrownSvg'
 import { IconArrowRight, IconStar } from '../graphics/icons'
 
+/* Узор girih под героем — общий фон страницы, он в App. */
 export function Hero() {
   const t = useT()
 
   return (
     <section className="hero" id="top" aria-labelledby="hero-title">
-      <GirihPattern />
-
       <div className="shell hero__grid">
         <div className="hero__copy">
           <p className="eyebrow">

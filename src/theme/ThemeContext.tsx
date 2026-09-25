@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 
 /**
  * Оформление сайта.
@@ -32,7 +33,14 @@ interface ThemeValue {
   pref: ThemePref
   /** Что реально показано на экране: только light или dark. */
   resolved: ResolvedTheme
-  setPref: (next: ThemePref) => void
+  /** from — точка на экране (обычно место клика), из которой новая
+      тема раскроется кругом. Без неё тема меняется мгновенно. */
+  setPref: (next: ThemePref, from?: Point) => void
+}
+
+interface Point {
+  x: number
+  y: number
 }
 
 const ThemeContext = createContext<ThemeValue | null>(null)
@@ -56,6 +64,25 @@ function systemTheme(): ResolvedTheme {
   return window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light'
 }
 
+function applyTheme(resolved: ResolvedTheme) {
+  const root = document.documentElement
+  root.dataset.theme = resolved
+  // Нативные контролы (select, скроллбары, автозаполнение) следуют
+  // color-scheme, а не нашим токенам. Без этой строки в тёмной теме
+  // выпадающий список услуг остался бы белым.
+  root.style.colorScheme = resolved
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', SURFACE[resolved])
+}
+
+/** Анимировать смену темы можно, если браузер умеет View Transitions
+    и человек не просил убрать движение. */
+function canAnimate(): boolean {
+  return (
+    typeof document.startViewTransition === 'function' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [pref, setPrefState] = useState<ThemePref>(readStoredPref)
   const [system, setSystem] = useState<ResolvedTheme>(systemTheme)
@@ -72,23 +99,41 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resolved: ResolvedTheme = pref === 'auto' ? system : pref
 
-  useEffect(() => {
-    const root = document.documentElement
-    root.dataset.theme = resolved
-    // Нативные контролы (select, скроллбары, автозаполнение) следуют
-    // color-scheme, а не нашим токенам. Без этой строки в тёмной теме
-    // выпадающий список услуг остался бы белым.
-    root.style.colorScheme = resolved
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', SURFACE[resolved])
-  }, [resolved])
+  useEffect(() => applyTheme(resolved), [resolved])
 
-  const setPref = useCallback((next: ThemePref) => {
-    setPrefState(next)
+  const setPref = useCallback((next: ThemePref, from?: Point) => {
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch {
       // Выбор не переживёт перезагрузку — но в текущей сессии работает.
     }
+
+    const nextResolved = next === 'auto' ? systemTheme() : next
+    const root = document.documentElement
+    // Анимация — только когда экран действительно меняется: «Авто»
+    // при совпадающей системной теме ничего не перекрашивает.
+    if (!from || nextResolved === root.dataset.theme || !canAnimate()) {
+      setPrefState(next)
+      return
+    }
+
+    // Радиус — до самого дальнего угла окна: круг должен накрыть всё.
+    const r = Math.hypot(
+      Math.max(from.x, window.innerWidth - from.x),
+      Math.max(from.y, window.innerHeight - from.y),
+    )
+    root.style.setProperty('--vt-x', `${from.x}px`)
+    root.style.setProperty('--vt-y', `${from.y}px`)
+    root.style.setProperty('--vt-r', `${r}px`)
+
+    // Браузер снимает страницу «до», вызывает колбэк и снимает «после».
+    // Поэтому внутри тема должна примениться синхронно: атрибут на
+    // <html> ставим сами, а React-состояние — через flushSync, чтобы
+    // переключатели успели отрисовать новый выбор к снимку.
+    document.startViewTransition(() => {
+      applyTheme(nextResolved)
+      flushSync(() => setPrefState(next))
+    })
   }, [])
 
   const value = useMemo<ThemeValue>(() => ({ pref, resolved, setPref }), [pref, resolved, setPref])

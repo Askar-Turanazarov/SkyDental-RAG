@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useTheme } from '../theme/ThemeContext'
 import type { ThemePref } from '../theme/ThemeContext'
 import { IconAuto, IconMoon, IconSun } from '../graphics/icons'
+import { useSegThumb } from '../components/useSegThumb'
 import { ApiError, AuthError, api } from './api'
 
 /* ============================================================
@@ -78,8 +79,9 @@ export function Seg<T extends string | number>({
   options: readonly { value: T; label: ReactNode; title?: string }[]
   onChange: (v: T) => void
 }) {
+  const ref = useSegThumb<HTMLDivElement>(value)
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
+    <div ref={ref} className="seg" role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -106,8 +108,9 @@ const THEMES: { value: ThemePref; label: string; Icon: typeof IconSun }[] = [
 
 export function ThemeSeg() {
   const { pref, setPref } = useTheme()
+  const ref = useSegThumb<HTMLDivElement>(pref)
   return (
-    <div className="seg" role="radiogroup" aria-label="Оформление">
+    <div ref={ref} className="seg" role="radiogroup" aria-label="Оформление">
       {THEMES.map(({ value, label, Icon }) => (
         <button
           key={value}

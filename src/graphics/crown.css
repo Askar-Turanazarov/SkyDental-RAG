@@ -105,7 +105,7 @@
 
 @keyframes crown-parallax {
   from { translate: 0 0; }
-  to { translate: 0 -6%; }
+  to { translate: 0 -10%; }
 }
 
 /* --- Уменьшение движения: сразу финальное состояние --- */

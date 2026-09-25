@@ -31,6 +31,14 @@ body {
   overflow-x: hidden;
 }
 
+/* Точка отсчёта для фона girih: он лежит под всем #root во всю высоту
+   документа (GirihPattern, girih.css). isolation — чтобы z-index: -1
+   узора остался внутри #root над фоном body, а не ушёл под него. */
+#root {
+  position: relative;
+  isolation: isolate;
+}
+
 h1, h2, h3, h4, p, figure, blockquote, dl, dd {
   margin: 0;
 }
@@ -201,6 +209,8 @@ a {
        Один элемент для всех — соседние переключатели должны
        читаться как один приём, а не как разные придумки. --- */
 .seg {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   padding: 3px;
   border-radius: var(--r-pill);
@@ -229,6 +239,30 @@ a {
   color: var(--content);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--content) 14%, transparent);
 }
+/* Скользящая подложка: одна на весь контрол, едет к выбранному
+   пункту на пружине — как сегментный контрол в iOS. Позицию и ширину
+   меряет useSegThumb и пишет в --thumb-x / --thumb-w; пока их нет
+   (до первой отрисовки или без JS), подложку рисует сам пункт. */
+.seg[data-thumb]::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: var(--thumb-w);
+  translate: var(--thumb-x) 0;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--content) 14%, transparent);
+  transition:
+    translate var(--dur-slow) var(--ease-spring-soft),
+    width var(--dur-slow) var(--ease-spring-soft);
+}
+.seg[data-thumb] > .seg__opt[data-active='true'] {
+  background: transparent;
+  box-shadow: none;
+}
 /* Активная тема — акцентной иконкой: из трёх иконок без подписей
    одной только подложки мало, чтобы выбранное состояние читалось. */
 .seg__opt--icon[data-active='true'] { color: var(--accent); }
@@ -248,6 +282,24 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+/* --- Смена темы: новая палитра раскрывается кругом от нажатой
+       кнопки (ThemeContext, View Transitions API). Браузер снимает
+       страницу «до» и «после», а вместо стандартного перекрёстного
+       затухания мы растим круг. Центр и радиус пишет JS в
+       --vt-x / --vt-y / --vt-r на <html>. --- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: theme-reveal var(--dur-slow) var(--ease-out);
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 0)); }
+  to { clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 0)); }
+}
+
 /* --- Появление секций: скромно, и полностью выключается --- */
 .reveal {
   opacity: 0;
@@ -259,6 +311,28 @@ a {
   opacity: 1;
   transform: none;
 }
+/* Внутри секции карточки и строки поднимаются по очереди, с шагом
+   60 мс: взгляд идёт по списку, а не получает его целиком. Сдвиг через
+   translate, а не transform — у карточек услуг transform занят
+   подъёмом при наведении, и анимация его бы перебила. */
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(2) { --i: 1; }
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(3) { --i: 2; }
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(4) { --i: 3; }
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(5) { --i: 4; }
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(6) { --i: 5; }
+.reveal :is(.services, .stats, .faq, .contact-list) > :nth-child(n + 7) { --i: 6; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal[data-visible='true'] :is(.services, .stats, .faq, .contact-list) > * {
+    animation: rise var(--dur-slow) var(--ease-out) both;
+    animation-delay: calc(120ms + var(--i, 0) * 60ms);
+  }
+}
+
+@keyframes rise {
+  from { opacity: 0; translate: 0 14px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal {
     opacity: 1;
@@ -266,6 +340,7 @@ a {
     transition: none;
   }
   .btn:active { transform: none; }
+  .seg[data-thumb]::before { transition: none; }
 }
 
 /* ---------------- Незаполненные демо-данные ----------------
