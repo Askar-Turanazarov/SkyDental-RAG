@@ -86,6 +86,11 @@ export class ChainError extends Error {
   }
 }
 
+export interface ChainOptions {
+  /** Ручная проверка из админки: звать модель, даже если она на паузе или не в списке. */
+  force?: boolean
+}
+
 /**
  * Стримит ответ первой доступной модели цепочки.
  * onText вызывается на каждый кусок текста.
@@ -94,6 +99,7 @@ export async function streamWithFallback(
   req: GenerateRequest,
   onText: (text: string) => void,
   entries: ChainEntry[] = defaultChain,
+  opts: ChainOptions = {},
 ): Promise<ChainResult> {
   const attempts: Attempt[] = []
 
@@ -106,15 +112,17 @@ export async function streamWithFallback(
       skip('провайдер не подключён: нет ключа в окружении')
       continue
     }
-    const paused = pausedFor(`p:${entry.provider}`) ?? pausedFor(`m:${modelKey(entry)}`)
-    if (paused) {
-      skip(`на паузе ещё ${paused.seconds} с (${paused.reason})`)
-      continue
-    }
-    const listed = await availableModels(entry.provider)
-    if (listed && !listed.has(entry.model)) {
-      skip('модели нет в списке доступных у провайдера')
-      continue
+    if (!opts.force) {
+      const paused = pausedFor(`p:${entry.provider}`) ?? pausedFor(`m:${modelKey(entry)}`)
+      if (paused) {
+        skip(`на паузе ещё ${paused.seconds} с (${paused.reason})`)
+        continue
+      }
+      const listed = await availableModels(entry.provider)
+      if (listed && !listed.has(entry.model)) {
+        skip('модели нет в списке доступных у провайдера')
+        continue
+      }
     }
 
     const ctrl = new AbortController()
@@ -142,6 +150,9 @@ export async function streamWithFallback(
         if (part.usage) usage = part.usage
       }
       attempts.push({ ...entry, status: 'ok', ms: Date.now() - started })
+      // Модель ответила (например, на пинг) — держать её на паузе незачем.
+      cooldowns.delete(`m:${modelKey(entry)}`)
+      cooldowns.delete(`p:${entry.provider}`)
       return { text, provider: entry.provider, model: entry.model, attempts, usage }
     } catch (err) {
       // Отмена снаружи (пользователь закрыл чат) — не ошибка модели.
@@ -149,10 +160,13 @@ export async function streamWithFallback(
       const perr = timedOut ? new ProviderError(timedOut, 'retryable') : asProviderError(err, entry.provider)
       attempts.push({ ...entry, status: 'error', detail: perr.message, ms: Date.now() - started })
 
-      if (perr.kind === 'auth') pause(`p:${entry.provider}`, COOLDOWN_AUTH_MS, 'ключ отклонён')
-      else if (perr.kind === 'model') pause(`m:${modelKey(entry)}`, COOLDOWN_MODEL_MS, 'модель не найдена')
-      else if (perr.kind === 'retryable') {
-        pause(`m:${modelKey(entry)}`, perr.retryAfterMs ?? COOLDOWN_RETRYABLE_MS, perr.status ? `HTTP ${perr.status}` : 'сбой/таймаут')
+      // Ручной пинг — диагностика: показывает ошибку, но маршрутизацию чата не трогает.
+      if (!opts.force) {
+        if (perr.kind === 'auth') pause(`p:${entry.provider}`, COOLDOWN_AUTH_MS, 'ключ отклонён')
+        else if (perr.kind === 'model') pause(`m:${modelKey(entry)}`, COOLDOWN_MODEL_MS, 'модель не найдена')
+        else if (perr.kind === 'retryable') {
+          pause(`m:${modelKey(entry)}`, perr.retryAfterMs ?? COOLDOWN_RETRYABLE_MS, perr.status ? `HTTP ${perr.status}` : 'сбой/таймаут')
+        }
       }
 
       // Модель уже начала отвечать — подменять её посреди ответа нельзя.
@@ -170,8 +184,8 @@ export async function streamWithFallback(
 }
 
 /** Ответ целиком, без стрима (для служебных вызовов вроде переформулировки вопроса). */
-export async function generateText(req: GenerateRequest, entries?: ChainEntry[]): Promise<ChainResult> {
-  return streamWithFallback(req, () => {}, entries)
+export async function generateText(req: GenerateRequest, entries?: ChainEntry[], opts?: ChainOptions): Promise<ChainResult> {
+  return streamWithFallback(req, () => {}, entries, opts)
 }
 
 /** Состояние цепочки для админки: что на паузе и почему. */

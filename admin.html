@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- Служебная страница: поисковикам тут делать нечего. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>SkyDental · Админка RAG</title>
+
+    <!-- Тема до первой отрисовки — та же логика, что в index.html. -->
+    <script>
+      (function () {
+        var pref = 'auto'
+        try {
+          pref = localStorage.getItem('skydental.theme') || 'auto'
+        } catch (e) {
+          /* приватный режим — читаем систему */
+        }
+        var dark =
+          pref === 'dark' ||
+          (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/admin/main.tsx"></script>
+  </body>
+</html>

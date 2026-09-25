@@ -6,6 +6,7 @@ import { getDb } from './db/client.js'
 import { env } from './env.js'
 import { chainStatus } from './llm/chain.js'
 import { chain, embedModelLabel, providers } from './llm/registry.js'
+import admin from './admin/routes.js'
 import { answerQuestion } from './rag/answer.js'
 import { clientIp, hashIp, overLimit } from './rateLimit.js'
 
@@ -100,6 +101,9 @@ app.get('/health', async (c) => {
     configuredChain: chain.map((e) => `${e.provider}:${e.model}`),
   })
 })
+
+/** Админка: /api/admin/* (server/admin/routes.ts). */
+app.route('/admin', admin)
 
 app.onError((err, c) => {
   console.error('[api]', err)

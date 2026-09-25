@@ -197,6 +197,47 @@ a {
 }
 .btn--quiet:hover { background: var(--accent-sunken); }
 
+/* --- Сегментированный контрол: язык, оформление, фильтры админки.
+       Один элемент для всех — соседние переключатели должны
+       читаться как один приём, а не как разные придумки. --- */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--content) 7%, transparent);
+}
+.seg__opt {
+  min-width: 40px;
+  min-height: 32px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--content-secondary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.seg__opt--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-width: 34px;
+  padding: 0 var(--s-2);
+}
+.seg__opt[data-active='true'] {
+  background: var(--surface);
+  color: var(--content);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--content) 14%, transparent);
+}
+/* Активная тема — акцентной иконкой: из трёх иконок без подписей
+   одной только подложки мало, чтобы выбранное состояние читалось. */
+.seg__opt--icon[data-active='true'] { color: var(--accent); }
+.seg__opt:hover:not([data-active='true']) { color: var(--content); }
+@media (pointer: coarse) {
+  .seg__opt { min-height: 38px; min-width: var(--tap); }
+  .seg__opt--icon { min-width: 40px; }
+}
+
 /* --- Карточка: ПЛОТНАЯ керамика, не стекло.
        liquid-glass.md › Review checklist п.1: стекло на карточках
        и контейнерах контента — дефект. --- */

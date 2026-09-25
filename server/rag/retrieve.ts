@@ -25,7 +25,7 @@ import { embedModelLabel, embedProvider } from '../llm/registry.js'
 const LEG_LIMIT = 20
 const RRF_K = 60
 /** Сколько кандидатов показать в трассе (в промпт идут первые RAG_TOP_K). */
-const SHOW_LIMIT = 8
+export const SHOW_LIMIT = 8
 
 interface Row {
   id: number
@@ -44,7 +44,8 @@ export interface RetrieveResult {
   ms: number
 }
 
-export async function retrieve(question: string, locale: Locale): Promise<RetrieveResult> {
+/** topK — сколько лучших кусков пойдёт в промпт (песочница админки меняет его на лету). */
+export async function retrieve(question: string, locale: Locale, topK = env.RAG_TOP_K): Promise<RetrieveResult> {
   const started = Date.now()
   const db = await getDb()
   const { terms, priceIntent } = queryTerms(question)
@@ -127,7 +128,7 @@ export async function retrieve(question: string, locale: Locale): Promise<Retrie
     .slice(0, SHOW_LIMIT)
 
   ranked.forEach((e, i) => {
-    if (i < env.RAG_TOP_K) e.n = i + 1
+    if (i < topK) e.n = i + 1
   })
 
   const bestScore = vecRows.length ? Number(vecRows[0].score) : null

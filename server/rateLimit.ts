@@ -20,7 +20,11 @@ export function hashIp(ip: string): string {
 }
 
 /** true — лимит превышен. */
-export async function overLimit(key: string): Promise<boolean> {
+export async function overLimit(
+  key: string,
+  max = env.RATE_LIMIT_MAX,
+  windowSec = env.RATE_LIMIT_WINDOW_SEC,
+): Promise<boolean> {
   const db = await getDb()
   const [row] = await db.query<{ count: number }>(
     `insert into rate_limits (key, window_start, count) values ($1, now(), 1)
@@ -30,7 +34,7 @@ export async function overLimit(key: string): Promise<boolean> {
        window_start = case when rate_limits.window_start < now() - make_interval(secs => $2) then now()
                            else rate_limits.window_start end
      returning count`,
-    [key, env.RATE_LIMIT_WINDOW_SEC],
+    [key, windowSec],
   )
-  return Number(row.count) > env.RATE_LIMIT_MAX
+  return Number(row.count) > max
 }
