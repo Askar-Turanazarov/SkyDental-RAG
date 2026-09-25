@@ -1,5 +1,6 @@
 import { useT } from '../i18n/LocaleContext'
 import { PhoneLink } from './PhoneLink'
+import { TELEGRAM_URL } from '../config'
 
 const SECTIONS = ['services', 'about', 'faq', 'contacts'] as const
 
@@ -35,7 +36,7 @@ export function Footer() {
                 <PhoneLink>{t.contacts.phone}</PhoneLink>
               </li>
               <li>
-                <a href="https://t.me/skydental_uz" target="_blank" rel="noopener noreferrer">
+                <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer">
                   {t.contacts.telegram}
                 </a>
               </li>

@@ -4,11 +4,7 @@ import { useT } from '../i18n/LocaleContext'
 import { IconArrowUpRight, IconCheck, IconClock, IconPhone, IconPin, IconTelegram } from '../graphics/icons'
 import { useReveal } from './useReveal'
 import { PhoneLink } from './PhoneLink'
-
-const TELEGRAM_URL = 'https://t.me/skydental_uz'
-// Номер дома — заглушка, поэтому ищем по улице: ссылка остаётся
-// рабочей и не ведёт в случайный двор. Уточнить вместе с адресом.
-const MAP_URL = 'https://yandex.uz/maps/?text=' + encodeURIComponent('Ташкент, улица Амира Темура')
+import { MAP_URL, TELEGRAM_URL } from '../config'
 
 /** +998 и 9 цифр; допускаем ввод без кода страны — тогда 9 цифр. */
 function normalizePhone(raw: string): string | null {

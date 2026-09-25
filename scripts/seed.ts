@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDb, migrate } from '../server/db/client.js'
-import { saveDocument } from '../server/rag/ingest.js'
+import { reindexAll, saveDocument } from '../server/rag/ingest.js'
 import type { Locale } from '../shared/protocol.js'
 
 /* ============================================================
@@ -13,9 +13,15 @@ import type { Locale } from '../shared/protocol.js'
    их могли поправить в админке, а md-файлы — только начальные
    данные. Флаг --force перезаписывает их содержимым файлов
    (как новая версия, старые остаются в истории).
+
+   --reindex — пересчитать индекс всех документов базы, например
+   после смены EMBED_MODEL. Тексты не трогает; векторы считаются
+   заново только там, где их посчитала другая модель. То же, что
+   «Переиндексировать всё» в админке.
    ============================================================ */
 
 const force = process.argv.includes('--force')
+const reindex = process.argv.includes('--reindex')
 const root = new URL('../content/rag/', import.meta.url)
 
 await migrate()
@@ -41,6 +47,15 @@ for (const locale of ['ru', 'uz'] as Locale[]) {
         : `  ${locale}/${slug}: без изменений`,
     )
   }
+}
+
+if (reindex) {
+  const reports = await reindexAll()
+  const sum = (k: 'total' | 'embedded' | 'reused') => reports.reduce((s, r) => s + r[k], 0)
+  console.log(
+    `  переиндексация: документов ${reports.length}, кусков ${sum('total')}, ` +
+      `векторов посчитано ${sum('embedded')}, взято готовых ${sum('reused')}`,
+  )
 }
 
 console.log('Готово.')
