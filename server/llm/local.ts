@@ -1,4 +1,5 @@
-import { stems } from '../../shared/text.js'
+import { NO_ANSWER } from '../../shared/protocol.js'
+import { queryTerms, stems } from '../../shared/text.js'
 import { EMBED_DIM } from '../env.js'
 import { ProviderError, normalize } from './types.js'
 import type { LLMProvider, StreamPart } from './types.js'
@@ -12,13 +13,14 @@ import type { LLMProvider, StreamPart } from './types.js'
      измерениям. Похожесть получается чисто лексической, и между
      языками она не работает — хорошая иллюстрация того, чем
      настоящая модель эмбеддингов лучше;
-   - «генерация» — извлекающая: берёт лучший кусок из контекста и
-     возвращает его со сноской [1].
+   - «генерация» — извлекающая: возвращает кусок контекста, больше
+     всех совпавший с вопросом по словам, со сноской [n]; без общих
+     слов отвечает NO_ANSWER (путь «модель отказалась»).
 
    Модели-двойники для проверки fallback:
      local:fail-429   — всегда «перегружена» (retryable)
      local:fail-auth  — «неверный ключ» (auth)
-     local:extractive — отвечает первым куском контекста
+     local:extractive — отвечает лучшим по словам куском контекста
    Пример: LLM_CHAIN=local:fail-429,local:extractive
    ============================================================ */
 
@@ -41,6 +43,34 @@ export function localEmbedding(text: string): number[] {
   return normalize(v)
 }
 
+/**
+ * «Генерация» офлайн-провайдера. Промпт RAG выглядит так (server/rag/prompt.ts):
+ *   [1] (источник)\nтекст\n\n[2] (источник)\nтекст … \n\nВопрос: …
+ * Берём кусок, где больше всего общих с вопросом основ слов, и цитируем
+ * его со сноской. Общих слов нет ни с одним — честно отвечаем NO_ANSWER,
+ * как требует промпт от настоящей модели.
+ */
+function extractiveAnswer(prompt: string): string {
+  const chunks = [...prompt.matchAll(/\[(\d+)\] \([^\n]*\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|\n\n(?:Вопрос|Savol): |$)/g)].map(
+    (m) => ({ n: Number(m[1]), text: m[2].trim() }),
+  )
+  // Контекста нет (режим «без RAG») — пересказывать нечего.
+  if (!chunks.length) return 'Офлайн-провайдер умеет только пересказывать найденный контекст, а контекста нет.'
+
+  const question = /\n\n(?:Вопрос|Savol): ([\s\S]*)$/.exec(prompt)?.[1] ?? ''
+  const terms = new Set(queryTerms(question).terms)
+  let best: (typeof chunks)[number] | null = null
+  let bestHits = 0
+  for (const chunk of chunks) {
+    const hits = new Set(stems(chunk.text).filter((s) => terms.has(s))).size
+    if (hits > bestHits) {
+      best = chunk
+      bestHits = hits
+    }
+  }
+  return best ? `${best.text} [${best.n}]` : NO_ANSWER
+}
+
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const t = setTimeout(resolve, ms)
@@ -56,11 +86,7 @@ export function localProvider(): LLMProvider {
       if (model === 'fail-auth') throw new ProviderError('local 401: имитация неверного ключа', 'auth', 401)
 
       const prompt = req.messages.at(-1)?.text ?? ''
-      // Первый кусок контекста в промпте имеет вид: [1] (источник)\nтекст
-      const m = prompt.match(/\[1\][^\n]*\n([\s\S]*?)(?:\n\n\[2\]|\n\nВопрос|\n\nSavol|$)/)
-      const answer = m
-        ? `${m[1].trim()} [1]`
-        : 'Офлайн-провайдер умеет только пересказывать найденный контекст, а контекста нет.'
+      const answer = extractiveAnswer(prompt)
 
       // Стримим по словам, чтобы UI вёл себя как с настоящей моделью.
       for (const word of answer.split(/(?<= )/)) {

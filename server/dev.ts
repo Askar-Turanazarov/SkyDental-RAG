@@ -7,7 +7,7 @@ import { chain, providers } from './llm/registry.js'
 /* Локальный API-сервер. Vite проксирует на него /api (vite.config.ts). */
 
 const db = await getDb()
-serve({ fetch: app.fetch, port: env.PORT }, ({ port }) => {
+serve({ fetch: app.fetch, port: env.API_PORT }, ({ port }) => {
   console.log(`API: http://localhost:${port}/api/health`)
   console.log(`  база:        ${db.driver === 'pglite' ? 'PGlite (.data/pglite)' : 'Postgres (DATABASE_URL)'}`)
   console.log(`  провайдеры:  ${[...providers.keys()].join(', ')}`)

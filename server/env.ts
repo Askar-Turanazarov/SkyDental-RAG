@@ -49,7 +49,9 @@ const schema = z.object({
   RATE_LIMIT_MAX: num(20),
   RATE_LIMIT_WINDOW_SEC: num(600),
 
-  PORT: num(8787),
+  /** Порт локального API. Не PORT: его подставляют хостинги и превью
+   *  для веб-сервера, и API занял бы порт Vite. */
+  API_PORT: num(8787),
 })
 
 export type Env = z.infer<typeof schema>

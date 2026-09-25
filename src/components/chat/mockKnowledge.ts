@@ -15,11 +15,19 @@ import type { KnowledgeDoc } from './knowledgeBase'
 
 interface IndexedDoc extends KnowledgeDoc {
   terms: Set<string>
+  /** Основы подписи источника: «Прайс-лист · Имплантация одного зуба». */
+  labelTerms: Set<string>
 }
 
+const index = (d: KnowledgeDoc): IndexedDoc => ({
+  ...d,
+  terms: new Set(stems(d.searchText)),
+  labelTerms: new Set(stems(d.sourceLabel)),
+})
+
 const INDEX: Record<Locale, IndexedDoc[]> = {
-  ru: KNOWLEDGE.ru.map((d) => ({ ...d, terms: new Set(stems(d.searchText)) })),
-  uz: KNOWLEDGE.uz.map((d) => ({ ...d, terms: new Set(stems(d.searchText)) })),
+  ru: KNOWLEDGE.ru.map(index),
+  uz: KNOWLEDGE.uz.map(index),
 }
 
 export interface MockHit {
@@ -39,7 +47,11 @@ export function searchMockKnowledge(question: string, locale: Locale, limit = 8)
   const scored = INDEX[locale]
     .map((doc) => {
       const hits = terms.filter((w) => doc.terms.has(w)).length
-      return { doc, hits, sort: hits + (priceIntent && doc.isPrice ? 0.5 : 0) }
+      // Слово вопроса в заголовке куска — сильный сигнал: «имплант» в строке
+      // «Имплантация одного зуба» важнее, чем в строке про томографию,
+      // где имплантация лишь упомянута.
+      const labelHits = terms.filter((w) => doc.labelTerms.has(w)).length
+      return { doc, hits, sort: hits + labelHits * 0.25 + (priceIntent && doc.isPrice ? 0.5 : 0) }
     })
     .filter((s) => s.hits > 0)
     .sort((a, b) => b.sort - a.sort)

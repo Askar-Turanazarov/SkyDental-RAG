@@ -1,46 +1,68 @@
-import type { Locale } from '../../i18n/types'
+import { sseData } from '../../../shared/sse.js'
+import type { ChatEvent, ChatRequest, RetrievedChunk } from '../../../shared/protocol.js'
 import { searchMockKnowledge } from './mockKnowledge'
 
-/* ============================================================
-   ШОВ RAG-БОТА. Это единственный файл, который нужно поменять,
-   чтобы подключить настоящий бэкенд. Компоненты чата знают только
-   интерфейс RagClient и не зависят от того, что за ним стоит.
+export type { AnswerMeta, ChatEvent, ChatTurn, RetrievalInfo, RetrievedChunk } from '../../../shared/protocol.js'
 
-   Как подключить:
-     1. Поднимите эндпоинт, который принимает POST с телом
-        { question: string, locale: 'ru' | 'uz', history: ChatTurn[] }
-        и отвечает JSON
-        { answer: string, sources: { title: string, url?: string }[] }
-        Пустой answer или found: false — «в материалах нет ответа».
-     2. Пропишите его в .env:  VITE_RAG_ENDPOINT=https://…/chat
-     3. Пересоберите проект. Плашка «Демо-режим» исчезнет сама.
+/* ============================================================
+   ШОВ RAG-БОТА. Компоненты чата знают только интерфейс RagClient.
+
+   За ним два варианта:
+   - HTTP — настоящий бэкенд (server/, /api/chat). Включается
+     переменной VITE_RAG_ENDPOINT=/api/chat.
+   - Демо — поиск по словам прямо в браузере, без сервера. Отдаёт
+     те же события протокола (retrieval → token → done), поэтому
+     интерфейс и панель «Как я нашёл ответ» работают и в демо.
+
+   Протокол событий описан в shared/protocol.ts.
    ============================================================ */
 
-export interface RagSource {
-  title: string
-  url?: string
-}
-
-export interface RagAnswer {
-  text: string
-  sources: RagSource[]
-  /** false — в материалах клиники ответа нет. UI покажет честный
-   *  отказ и путь к живому человеку, а не выдуманный ответ. */
-  found: boolean
-}
-
-export interface ChatTurn {
-  role: 'user' | 'assistant'
-  text: string
-}
-
 export interface RagClient {
-  /** true — работает мок по локальной базе, а не настоящий RAG. */
+  /** true — работает демо в браузере, а не настоящий RAG. */
   readonly isStub: boolean
-  ask(question: string, locale: Locale, history: ChatTurn[], signal?: AbortSignal): Promise<RagAnswer>
+  stream(req: ChatRequest, onEvent: (ev: ChatEvent) => void, signal?: AbortSignal): Promise<void>
+  feedback(traceId: string, rating: 'up' | 'down', comment?: string): Promise<void>
 }
 
-/* ---------- Мок: поиск по локальной базе ---------- */
+/* ---------- HTTP: настоящий бэкенд ---------- */
+
+function httpRagClient(endpoint: string): RagClient {
+  const feedbackUrl = endpoint.replace(/chat\/?$/, 'feedback')
+
+  return {
+    isStub: false,
+
+    async stream(req, onEvent, signal) {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify(req),
+        signal,
+      })
+      if (!res.ok || !res.body) throw new Error(`RAG endpoint responded ${res.status}`)
+
+      let finished = false
+      for await (const data of sseData(res.body)) {
+        const ev = JSON.parse(data) as ChatEvent
+        if (ev.type === 'done' || ev.type === 'error') finished = true
+        onEvent(ev)
+      }
+      // Поток оборвался без итогового события — это обрыв связи.
+      if (!finished) throw new Error('RAG stream ended unexpectedly')
+    },
+
+    async feedback(traceId, rating, comment) {
+      const res = await fetch(feedbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ traceId, rating, comment }),
+      })
+      if (!res.ok) throw new Error(`feedback responded ${res.status}`)
+    },
+  }
+}
+
+/* ---------- Демо: поиск по словам в браузере ---------- */
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -57,45 +79,94 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+const DEMO_TOP_K = 3
+
 const mockRagClient: RagClient = {
   isStub: true,
-  async ask(question, locale, _history, signal) {
-    // Имитация задержки поиска и генерации, чтобы UI загрузки был
-    // проверен уже сейчас, а не впервые на проде.
-    await sleep(650 + Math.random() * 500, signal)
-    const [hit] = searchMockKnowledge(question, locale).hits
-    if (!hit) return { text: '', sources: [], found: false }
-    return { text: hit.doc.text, sources: [{ title: hit.doc.sourceLabel }], found: true }
+
+  async stream(req, onEvent, signal) {
+    const started = performance.now()
+    // Имитация задержек поиска и генерации: UI загрузки проверен
+    // уже сейчас, а не впервые на проде.
+    await sleep(350 + Math.random() * 250, signal)
+
+    if (req.mode === 'no-rag') {
+      const text =
+        req.locale === 'ru'
+          ? 'В демо-режиме модели нет — сравнение «без RAG» работает только с настоящим бэкендом.'
+          : 'Demo rejimda model yoʻq — «RAGsiz» taqqoslash faqat haqiqiy backend bilan ishlaydi.'
+      onEvent({ type: 'token', text })
+      onEvent({ type: 'done', meta: demoMeta(req, false, [], started, 0) })
+      return
+    }
+
+    const { hits } = searchMockKnowledge(req.question, req.locale)
+    const chunks: RetrievedChunk[] = hits.map((h, i) => ({
+      chunkId: `${h.doc.locale}:${h.doc.sourceLabel}:${h.doc.ord}`,
+      locale: h.doc.locale,
+      source: h.doc.sourceLabel,
+      text: h.doc.text,
+      vecScore: null,
+      vecRank: null,
+      textScore: Number(h.score.toFixed(2)),
+      textRank: h.rank,
+      rrf: Number(h.score.toFixed(2)),
+      n: i < DEMO_TOP_K ? i + 1 : null,
+    }))
+    const retrieveMs = Math.round(performance.now() - started)
+    onEvent({
+      type: 'retrieval',
+      retrieval: {
+        question: req.question,
+        condensed: null,
+        chunks,
+        bestScore: chunks[0]?.textScore ?? null,
+        threshold: 0,
+        method: 'keyword',
+        ms: retrieveMs,
+      },
+    })
+
+    if (!chunks.length) {
+      onEvent({ type: 'done', meta: demoMeta(req, false, [], started, retrieveMs) })
+      return
+    }
+
+    // «Генерация» демо — первый найденный кусок со сноской.
+    await sleep(250, signal)
+    const answer = `${chunks[0].text} [1]`
+    for (const word of answer.split(/(?<= )/)) {
+      await sleep(18, signal)
+      onEvent({ type: 'token', text: word })
+    }
+    const sources = [{ n: 1, source: chunks[0].source, text: chunks[0].text }]
+    onEvent({ type: 'done', meta: demoMeta(req, true, sources, started, retrieveMs) })
+  },
+
+  async feedback() {
+    // В демо отзыв некуда отправить: бэкенда нет.
   },
 }
 
-/* ---------- HTTP: настоящий бэкенд ---------- */
-
-interface HttpResponseBody {
-  answer?: string
-  sources?: RagSource[]
-  found?: boolean
-}
-
-function httpRagClient(endpoint: string): RagClient {
+function demoMeta(
+  req: ChatRequest,
+  found: boolean,
+  sources: { n: number; source: string; text: string }[],
+  started: number,
+  retrieveMs: number,
+) {
+  const totalMs = Math.round(performance.now() - started)
   return {
-    isStub: false,
-    async ask(question, locale, history, signal) {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, locale, history }),
-        signal,
-      })
-      if (!res.ok) throw new Error(`RAG endpoint responded ${res.status}`)
-      const body = (await res.json()) as HttpResponseBody
-      const text = body.answer?.trim() ?? ''
-      return {
-        text,
-        sources: Array.isArray(body.sources) ? body.sources : [],
-        found: body.found ?? text.length > 0,
-      }
-    },
+    traceId: null,
+    mode: req.mode ?? 'rag',
+    found,
+    refusal: found ? null : { reason: 'no-chunks' as const, bestScore: null, threshold: 0 },
+    sources,
+    provider: 'demo',
+    model: 'keyword-search',
+    attempts: [],
+    timings: { retrieveMs, generateMs: totalMs - retrieveMs, totalMs },
+    usage: null,
   }
 }
 

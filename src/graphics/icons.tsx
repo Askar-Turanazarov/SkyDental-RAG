@@ -203,6 +203,35 @@ export const IconCheck = (p: IconProps) => (
   </Icon>
 )
 
+/** Поиск по базе: лупа над строками документа. */
+export const IconSearchDoc = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 5.5h9M4 9.5h6M4 13.5h4" />
+    <circle cx="15.5" cy="14.5" r="4" />
+    <path d="m18.5 17.5 2.5 2.5" />
+  </Icon>
+)
+
+/** Режим студента: колба. */
+export const IconFlask = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9.5 3.5h5M10 3.5v5.2L5 17.6a2 2 0 0 0 1.7 2.9h10.6a2 2 0 0 0 1.7-2.9L14 8.7V3.5" />
+    <path d="M7.2 14.5h9.6" />
+  </Icon>
+)
+
+export const IconExpand = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5" />
+  </Icon>
+)
+
+export const IconCollapse = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M20 10h-6V4M4 14h6v6M14 10l6.5-6.5M10 14l-6.5 6.5" />
+  </Icon>
+)
+
 /* ---------- Оформление ----------
    Три состояния переключателя темы. «Авто» — круг, закрашенный
    наполовину: та же метафора, что в системных настройках, где

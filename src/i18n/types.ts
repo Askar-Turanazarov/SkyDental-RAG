@@ -165,5 +165,57 @@ export interface Dict {
     feedbackThanks: string
     /** Плашка режима заглушки — видна, пока не подключён бэкенд. */
     stubBadge: string
+    /** Статус после поиска, до первого слова. {n} — сколько фрагментов нашлось. */
+    generating: string
+    rateLimited: string
+    feedbackCommentLabel: string
+    feedbackCommentPlaceholder: string
+    feedbackCommentSend: string
+    feedbackCommentSkip: string
+    /** Режим студента: панель RAG раскрыта, видны оценки и сравнение без RAG. */
+    studentMode: string
+    studentModeOn: string
+    studentModeOff: string
+    expand: string
+    collapse: string
+    /** {n} — номер сноски, {source} — подпись источника. */
+    citeLabel: string
+    compareButton: string
+    compareTitle: string
+    compareNote: string
+    compareFailed: string
+    /** Почему бот отказался. {best} и {threshold} — числа. */
+    refusal: {
+      belowThreshold: string
+      noChunks: string
+      modelDeclined: string
+    }
+    trace: {
+      summary: string
+      /** {n} — фрагментов в промпте, {ms} — время поиска. */
+      summaryMeta: string
+      question: string
+      condensed: string
+      methodHybrid: string
+      methodKeyword: string
+      semantic: string
+      keyword: string
+      inPrompt: string
+      notInPrompt: string
+      /** {best}, {threshold} */
+      threshold: string
+      passed: string
+      failed: string
+      model: string
+      attempts: string
+      attemptOk: string
+      attemptError: string
+      attemptSkipped: string
+      tokens: string
+      timing: string
+      /** Единица «миллисекунды». */
+      ms: string
+      demoNote: string
+    }
   }
 }
