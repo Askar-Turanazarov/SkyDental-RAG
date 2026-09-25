@@ -63,9 +63,9 @@ const mockRagClient: RagClient = {
     // Имитация задержки поиска и генерации, чтобы UI загрузки был
     // проверен уже сейчас, а не впервые на проде.
     await sleep(650 + Math.random() * 500, signal)
-    const hit = searchMockKnowledge(question, locale)
+    const [hit] = searchMockKnowledge(question, locale).hits
     if (!hit) return { text: '', sources: [], found: false }
-    return { text: hit.answer, sources: [{ title: hit.source }], found: true }
+    return { text: hit.doc.text, sources: [{ title: hit.doc.sourceLabel }], found: true }
   },
 }
 
