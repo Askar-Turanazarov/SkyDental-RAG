@@ -18,10 +18,15 @@ import type { Locale } from '../shared/protocol.js'
    после смены EMBED_MODEL. Тексты не трогает; векторы считаются
    заново только там, где их посчитала другая модель. То же, что
    «Переиндексировать всё» в админке.
+
+   --no-index — только записать тексты, без эмбеддингов. Для Vercel,
+   где ключ модели хранится как секрет и локально недоступен: индекс
+   потом строит «Переиндексировать всё» в админке на самом Vercel.
    ============================================================ */
 
 const force = process.argv.includes('--force')
 const reindex = process.argv.includes('--reindex')
+const noIndex = process.argv.includes('--no-index')
 const root = new URL('../content/rag/', import.meta.url)
 
 await migrate()
@@ -39,10 +44,12 @@ for (const locale of ['ru', 'uz'] as Locale[]) {
       continue
     }
     const bodyMd = (await readFile(join(dir, file), 'utf8')).replace(/\r\n/g, '\n')
-    const res = await saveDocument({ locale, slug, bodyMd, note: 'seed из content/rag' })
+    const res = await saveDocument({ locale, slug, bodyMd, note: 'seed из content/rag', index: !noIndex })
     const idx = res.index
     console.log(
-      res.changed && idx
+      res.changed && !idx
+        ? `  ${locale}/${slug}: v${res.version}, записан без индекса`
+        : res.changed && idx
         ? `  ${locale}/${slug}: v${res.version}, кусков ${idx.total}, векторов посчитано ${idx.embedded}, взято готовых ${idx.reused}`
         : `  ${locale}/${slug}: без изменений`,
     )

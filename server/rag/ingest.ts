@@ -92,6 +92,8 @@ export interface SaveDocumentInput {
   bodyMd: string
   isPrice?: boolean
   note?: string
+  /** false — только записать текст, индекс построить позже (reindexAll). */
+  index?: boolean
 }
 
 /**
@@ -136,7 +138,7 @@ export async function saveDocument(input: SaveDocumentInput): Promise<{ id: numb
     input.note ?? null,
   ])
 
-  const index = await indexDocument(id)
+  const index = input.index === false ? null : await indexDocument(id)
   return { id, version, changed: true, index }
 }
 
