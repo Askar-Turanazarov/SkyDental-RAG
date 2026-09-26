@@ -1,6 +1,6 @@
 # SkyDental — stomatologiya klinikasi uchun RAG yordamchisi
 
-[English](README.md) · [Русский](README.ru.md) · **Oʻzbekcha**
+[English](README.md) · **Oʻzbekcha** · [Русский](README.ru.md)
 
 **Retrieval-Augmented Generation (RAG)** haqidagi oʻquv loyihasi: javob topilgan hujjatlarga
 tayanib yaratiladi. Bu Toshkentdagi stomatologiya klinikasining rus va oʻzbek tilidagi

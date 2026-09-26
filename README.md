@@ -1,6 +1,6 @@
 # SkyDental — a RAG support assistant for a dental clinic
 
-**English** · [Русский](README.ru.md) · [Oʻzbekcha](README.uz.md)
+**English** · [Oʻzbekcha](README.uz.md) · [Русский](README.ru.md)
 
 A course project about **Retrieval-Augmented Generation (RAG)**. It is the landing page of a dental
 clinic in Tashkent (Russian and Uzbek), with a chat assistant that answers **only from the clinic's

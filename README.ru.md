@@ -1,6 +1,6 @@
 # SkyDental — RAG-ассистент поддержки стоматологической клиники
 
-[English](README.md) · **Русский** · [Oʻzbekcha](README.uz.md)
+[English](README.md) · [Oʻzbekcha](README.uz.md) · **Русский**
 
 Учебный проект про **Retrieval-Augmented Generation (RAG)**: генерацию ответов с опорой на
 найденные документы. Это лендинг стоматологии в Ташкенте на русском и узбекском с чат-ассистентом,
