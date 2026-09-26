@@ -56,7 +56,16 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>
 
-export const env: Env = schema.parse(process.env)
+/* Значения из панели Vercel или скопированного .env бывают с пробелами,
+   символом CR на конце или пустыми. Пустое считаем незаданным: тогда
+   работает значение по умолчанию, а не падает вся функция. */
+const cleaned = Object.fromEntries(
+  Object.entries(process.env)
+    .map(([k, v]) => [k, v?.trim()])
+    .filter(([, v]) => v),
+)
+
+export const env: Env = schema.parse(cleaned)
 
 /** Размерность векторов. Зафиксирована в схеме БД: vector(768). */
 export const EMBED_DIM = 768

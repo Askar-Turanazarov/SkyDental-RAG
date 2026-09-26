@@ -56,3 +56,5 @@ PLAN.md
 
 # --- отчёт npm run eval: генерируется заново при каждом запуске ---
 eval/report.md
+.vercel
+.env*
