@@ -248,6 +248,11 @@ export const uz: Dict = {
       noChunks: 'Qidiruv bazadan birorta oʻxshash parcha topmadi.',
       modelDeclined: 'Parchalar topildi, lekin model ularda javob topmadi va oʻzidan toʻqimadi.',
     },
+    kind: {
+      kb: 'Klinika materiallari asosida',
+      general: 'Umumiy maʼlumot, klinika materiallaridan emas. Aniqrogʻini shifokor koʻrikda aytadi.',
+      missing: 'Klinika materiallarida aniq maʼlumot yoʻq — administrator aytib beradi.',
+    },
     trace: {
       summary: 'Javobni qanday topdim',
       summaryMeta: '{n} parcha · qidiruv {ms} ms',

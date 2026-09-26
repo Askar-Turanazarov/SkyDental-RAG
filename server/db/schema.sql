@@ -71,6 +71,17 @@ create table if not exists chat_traces (
 );
 create index if not exists chat_traces_created_idx on chat_traces (created_at desc);
 
+-- Вид ответа: kb | general | missing | offtopic | smalltalk (см. AnswerKind).
+alter table chat_traces add column if not exists answer_kind text;
+
+-- Ремонт: ранние трассы на postgres.js записали JSON дважды
+-- закодированным — строкой вместо объекта. Разворачиваем обратно.
+update chat_traces set retrieval = (retrieval #>> '{}')::jsonb where jsonb_typeof(retrieval) = 'string';
+update chat_traces set refusal = (refusal #>> '{}')::jsonb where jsonb_typeof(refusal) = 'string';
+update chat_traces set attempts = (attempts #>> '{}')::jsonb where jsonb_typeof(attempts) = 'string';
+update chat_traces set timings = (timings #>> '{}')::jsonb where jsonb_typeof(timings) = 'string';
+update chat_traces set usage = (usage #>> '{}')::jsonb where jsonb_typeof(usage) = 'string';
+
 -- Отзыв на ответ. Один на трассу: повторный клик меняет оценку.
 create table if not exists feedback (
   trace_id    uuid primary key references chat_traces(id) on delete cascade,

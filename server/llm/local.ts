@@ -45,19 +45,19 @@ export function localEmbedding(text: string): number[] {
 
 /**
  * «Генерация» офлайн-провайдера. Промпт RAG выглядит так (server/rag/prompt.ts):
- *   [1] (источник)\nтекст\n\n[2] (источник)\nтекст … \n\nВопрос: …
+ *   <context>\n[1] (источник)\nтекст\n\n[2] (источник)\nтекст …\n</context>\n\nВопрос:\n<question>\n…\n</question>
  * Берём кусок, где больше всего общих с вопросом основ слов, и цитируем
  * его со сноской. Общих слов нет ни с одним — честно отвечаем NO_ANSWER,
  * как требует промпт от настоящей модели.
  */
 function extractiveAnswer(prompt: string): string {
-  const chunks = [...prompt.matchAll(/\[(\d+)\] \([^\n]*\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|\n\n(?:Вопрос|Savol): |$)/g)].map(
+  const chunks = [...prompt.matchAll(/\[(\d+)\] \([^\n]*\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|\n<\/context>|$)/g)].map(
     (m) => ({ n: Number(m[1]), text: m[2].trim() }),
   )
   // Контекста нет (режим «без RAG») — пересказывать нечего.
   if (!chunks.length) return 'Офлайн-провайдер умеет только пересказывать найденный контекст, а контекста нет.'
 
-  const question = /\n\n(?:Вопрос|Savol): ([\s\S]*)$/.exec(prompt)?.[1] ?? ''
+  const question = /<question>\n?([\s\S]*?)\n?<\/question>/.exec(prompt)?.[1] ?? ''
   const terms = new Set(queryTerms(question).terms)
   let best: (typeof chunks)[number] | null = null
   let bestHits = 0

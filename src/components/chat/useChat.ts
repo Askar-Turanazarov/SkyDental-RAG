@@ -76,7 +76,7 @@ export function useChat(locale: Locale) {
             break
           case 'done':
             setStatus('idle')
-            patch(id, (m) => ({ ...m, streaming: false, meta: ev.meta, notFound: !ev.meta.found }))
+            patch(id, (m) => ({ ...m, streaming: false, meta: ev.meta, notFound: ev.meta.kind === null && ev.meta.refusal !== null }))
             break
           case 'error':
             setStatus(ev.code === 'rate-limit' ? 'rate-limit' : 'error')

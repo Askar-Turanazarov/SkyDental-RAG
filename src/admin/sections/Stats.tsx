@@ -44,10 +44,15 @@ function StatsView({ s, loading }: { s: StatsData; loading: boolean }) {
         <Kpi label="Вопросов" value={s.total} sub={`RAG ${s.rag} · без RAG ${s.noRag}`} />
         <Kpi label="Ответ из базы" value={pct(s.found, s.rag)} sub={`${s.found} из ${s.rag} вопросов в режиме RAG`} tone="good" />
         <Kpi
-          label="Честные отказы"
+          label="Нет в базе"
           value={pct(s.notFound, s.rag)}
           sub={`ниже порога ${s.refusals['below-threshold']} · поиск пуст ${s.refusals['no-chunks']} · модель не нашла ${s.refusals['model-declined']}`}
           tone={s.notFound ? 'warn' : undefined}
+        />
+        <Kpi
+          label="Вне базы"
+          value={s.kinds.general + s.kinds.offtopic + s.kinds.smalltalk}
+          sub={`общая справка ${s.kinds.general} · не по теме ${s.kinds.offtopic} · приветствия ${s.kinds.smalltalk}`}
         />
         <Kpi
           label="Fallback"

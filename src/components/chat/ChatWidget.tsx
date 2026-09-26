@@ -337,9 +337,21 @@ function AssistantMessage({ m, status, student, c, chat }: AssistantProps) {
             citeLabel={(n, source) => fill(c.citeLabel, { n, source })}
           />
           {activeChunk && <CiteCard chunk={activeChunk} />}
+          {done && m.meta!.kind === 'general' && <p className="msg__kind">{c.kind.general}</p>}
+          {done && m.meta!.kind === 'missing' && (
+            <>
+              <p className="msg__kind">{c.kind.missing}</p>
+              <PhoneLink className="btn btn--secondary chat__call">
+                <IconPhone size={18} />
+                {c.fallbackCall}
+              </PhoneLink>
+            </>
+          )}
           {done && m.meta!.sources.length > 0 && (
             <div className="msg__sources">
-              <span className="msg__sources-title">{c.sourcesTitle}</span>
+              <span className="msg__sources-title">
+                {m.meta!.kind === 'kb' ? `${c.kind.kb} · ${c.sourcesTitle}` : c.sourcesTitle}
+              </span>
               {m.meta!.sources.map((s) => (
                 <button
                   key={s.n}

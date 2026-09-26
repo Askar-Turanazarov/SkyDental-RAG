@@ -16,7 +16,8 @@ import type {
   TraceList,
   TraceRow,
 } from '../../shared/admin.js'
-import type { AnswerMeta, Locale, RefusalReason, RetrievalInfo } from '../../shared/protocol.js'
+import { ANSWER_KINDS } from '../../shared/protocol.js'
+import type { AnswerKind, AnswerMeta, Locale, RefusalReason, RetrievalInfo } from '../../shared/protocol.js'
 import { queryTerms } from '../../shared/text.js'
 import { getDb } from '../db/client.js'
 import { env } from '../env.js'
@@ -71,7 +72,7 @@ admin.post('/logout', (c) => {
 /* ---------- Трассы и отзывы ---------- */
 
 const TRACE_COLUMNS = `
-  t.id, t.created_at as "createdAt", t.locale, t.mode, t.question, t.found,
+  t.id, t.created_at as "createdAt", t.locale, t.mode, t.question, t.found, t.answer_kind as kind,
   t.refusal->>'reason' as "refusalReason", t.provider, t.model,
   exists (select 1 from jsonb_array_elements(t.attempts) a where a->>'status' <> 'ok') as fallback,
   coalesce((t.timings->>'totalMs')::int, 0) as "totalMs",
@@ -83,7 +84,8 @@ const FILTERS: Record<TraceFilter, string> = {
   down: `f.rating = 'down'`,
   up: `f.rating = 'up'`,
   commented: 'f.comment is not null',
-  notfound: `not t.found and t.mode = 'rag'`,
+  // Нет ответа в базе: модель сказала «нет данных» или офлайн-отказ.
+  notfound: `t.refusal is not null and t.mode = 'rag'`,
 }
 
 admin.get('/traces', async (c) => {
@@ -142,6 +144,7 @@ admin.get('/traces/:id', async (c) => {
     traceId: row.id,
     mode: row.mode,
     found: row.found,
+    kind: row.kind,
     refusal,
     sources: (row.retrieval?.chunks ?? [])
       .filter((ch) => ch.n !== null && cited.has(ch.n))
@@ -236,7 +239,12 @@ admin.get('/stats', async (c) => {
          count(*) filter (where t.mode = 'no-rag')::int as "noRag",
          count(*) filter (where t.mode = 'rag' and t.found)::int as found,
          count(*) filter (where t.mode = 'rag' and not t.found and t.refusal is not null)::int as "notFound",
-         count(*) filter (where not t.found and t.refusal is null)::int as failed,
+         count(*) filter (where not t.found and t.refusal is null and t.answer_kind is null and t.answer = '')::int as failed,
+         count(*) filter (where t.answer_kind = 'kb')::int as "kindKb",
+         count(*) filter (where t.answer_kind = 'general')::int as "kindGeneral",
+         count(*) filter (where t.answer_kind = 'missing')::int as "kindMissing",
+         count(*) filter (where t.answer_kind = 'offtopic')::int as "kindOfftopic",
+         count(*) filter (where t.answer_kind = 'smalltalk')::int as "kindSmalltalk",
          count(*) filter (where t.refusal->>'reason' = 'below-threshold')::int as "belowThreshold",
          count(*) filter (where t.refusal->>'reason' = 'no-chunks')::int as "noChunks",
          count(*) filter (where t.refusal->>'reason' = 'model-declined')::int as "modelDeclined",
@@ -274,7 +282,7 @@ admin.get('/stats', async (c) => {
     ),
     db.query<Stats['perDay'][number]>(
       `select to_char(date_trunc('day', t.created_at), 'YYYY-MM-DD') as day, count(*)::int as total,
-              count(*) filter (where t.mode = 'rag' and not t.found)::int as "notFound",
+              count(*) filter (where t.mode = 'rag' and t.refusal is not null)::int as "notFound",
               count(f.rating) filter (where f.rating = 'down')::int as down
        from chat_traces t left join feedback f on f.trace_id = t.id
        where ${since}
@@ -297,6 +305,9 @@ admin.get('/stats', async (c) => {
       'no-chunks': n(main.noChunks),
       'model-declined': n(main.modelDeclined),
     },
+    kinds: Object.fromEntries(
+      ANSWER_KINDS.map((k) => [k, n(main[`kind${k[0].toUpperCase()}${k.slice(1)}`])]),
+    ) as Record<AnswerKind, number>,
     fallbacks: n(main.fallbacks),
     latency: { p50: main.p50 ?? null, p95: main.p95 ?? null },
     feedback: fb,
@@ -510,22 +521,30 @@ admin.post('/sandbox', async (c) => {
   )
   if (!data) return c.json({ error: 'bad-request' }, 400)
   const r = await retrieve(data.question, data.locale, data.topK)
-  const retrieval: RetrievalInfo = {
-    question: data.question,
-    condensed: null,
-    chunks: r.chunks,
-    bestScore: r.bestScore,
-    threshold: env.RAG_MIN_SCORE,
-    method: 'hybrid',
-    ms: r.ms,
-  }
-  const req = ragRequest(data.question, data.locale, r.chunks)
+  // Так же, как в answer.ts: порог не пройден — фрагменты в промпт не идут.
   const wouldRefuse: RefusalReason | null = !r.chunks.length
     ? 'no-chunks'
     : r.bestScore === null || r.bestScore < env.RAG_MIN_SCORE
       ? 'below-threshold'
       : null
-  return c.json<SandboxResult>({ retrieval, prompt: { system: req.system, user: req.messages[0].text }, wouldRefuse })
+  const retrieval: RetrievalInfo = {
+    question: data.question,
+    condensed: null,
+    chunks: wouldRefuse ? r.chunks.map((ch) => ({ ...ch, n: null })) : r.chunks,
+    bestScore: r.bestScore,
+    threshold: env.RAG_MIN_SCORE,
+    method: 'hybrid',
+    ms: r.ms,
+  }
+  const req = ragRequest({
+    question: data.question,
+    locale: data.locale,
+    history: [],
+    chunks: retrieval.chunks,
+    bestScore: r.bestScore,
+    threshold: env.RAG_MIN_SCORE,
+  })
+  return c.json<SandboxResult>({ retrieval, prompt: { system: req.system, user: req.messages.at(-1)!.text }, wouldRefuse })
 })
 
 export default admin

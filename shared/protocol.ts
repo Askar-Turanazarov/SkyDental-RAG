@@ -72,6 +72,18 @@ export interface Attempt {
 
 export type RefusalReason = 'below-threshold' | 'no-chunks' | 'model-declined'
 
+/**
+ * Какой ответ дала модель. Она сама ставит метку первой строкой
+ * ([[kb]] и т. п.), сервер метку вырезает и кладёт сюда.
+ *  - kb        — по материалам клиники, со сносками [n];
+ *  - general   — общая справка о стоматологии, не из материалов;
+ *  - missing   — вопрос о клинике, а в материалах ответа нет;
+ *  - offtopic  — вопрос не о стоматологии;
+ *  - smalltalk — приветствие, благодарность, прощание.
+ */
+export type AnswerKind = 'kb' | 'general' | 'missing' | 'offtopic' | 'smalltalk'
+export const ANSWER_KINDS: readonly AnswerKind[] = ['kb', 'general', 'missing', 'offtopic', 'smalltalk']
+
 export interface AnswerSource {
   n: number
   source: string
@@ -81,7 +93,11 @@ export interface AnswerSource {
 export interface AnswerMeta {
   traceId: string | null
   mode: ChatMode
+  /** Ответ опирается на материалы клиники (kind = kb). */
   found: boolean
+  /** Вид ответа; null — режим без RAG, офлайн-отказ или сбой. */
+  kind: AnswerKind | null
+  /** Почему в материалах не нашлось ответа (kind = missing или офлайн-отказ). */
   refusal: { reason: RefusalReason; bestScore: number | null; threshold: number } | null
   /** Источники, на которые модель действительно сослалась. */
   sources: AnswerSource[]
@@ -106,5 +122,5 @@ export interface FeedbackRequest {
   comment?: string
 }
 
-/** Маркер, которым модель сообщает «в материалах ответа нет». */
+/** Маркер, которым офлайн-модель local сообщает «в материалах ответа нет». */
 export const NO_ANSWER = 'NO_ANSWER'

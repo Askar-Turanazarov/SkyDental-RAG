@@ -3,7 +3,7 @@
    страницы admin.html, чтобы обе стороны не разошлись.
    ============================================================ */
 
-import type { AnswerMeta, Attempt, ChatMode, Locale, RefusalReason, RetrievalInfo } from './protocol.js'
+import type { AnswerKind, AnswerMeta, Attempt, ChatMode, Locale, RefusalReason, RetrievalInfo } from './protocol.js'
 
 export interface SessionInfo {
   /** false — ADMIN_PASSWORD не задан, админка выключена. */
@@ -22,6 +22,8 @@ export interface TraceRow {
   /** Начало ответа (полный — в карточке трассы). */
   answer: string
   found: boolean
+  /** Вид ответа; null — старые трассы, режим без RAG, отказ или сбой. */
+  kind: AnswerKind | null
   refusalReason: RefusalReason | null
   provider: string | null
   model: string | null
@@ -66,6 +68,8 @@ export interface Stats {
   notFound: number
   failed: number
   refusals: Record<RefusalReason, number>
+  /** Сколько ответов каждого вида (метка модели). */
+  kinds: Record<AnswerKind, number>
   fallbacks: number
   latency: { p50: number | null; p95: number | null }
   feedback: { up: number; down: number; commented: number }
@@ -148,5 +152,6 @@ export interface SandboxResult {
   retrieval: RetrievalInfo
   /** Ровно то, что увидит модель. */
   prompt: { system: string; user: string }
+  /** Почему фрагменты не пойдут в промпт; null — пойдут. */
   wouldRefuse: RefusalReason | null
 }

@@ -77,7 +77,7 @@ export async function indexDocument(documentId: number): Promise<IndexReport> {
     await db.query(
       `insert into chunks (document_id, ord, locale, heading, source_label, text, search_stems, embedding, embed_model, content_hash)
        select $1, x.ord, $2, x.heading, x.source_label, x.text, x.search_stems, x.embedding::vector, $3, x.content_hash
-       from jsonb_to_recordset($4::jsonb) as x(ord int, heading text, source_label text, text text,
+       from jsonb_to_recordset($4::text::jsonb) as x(ord int, heading text, source_label text, text text,
                                                search_stems text, embedding text, content_hash text)`,
       [documentId, doc.locale, embedModelLabel, JSON.stringify(rows)],
     )

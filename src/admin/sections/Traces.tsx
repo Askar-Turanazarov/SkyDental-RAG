@@ -8,7 +8,7 @@ import { AnswerText, CiteCard } from '../../components/chat/AnswerText'
 import { RetrievalTrace } from '../../components/chat/RetrievalTrace'
 import { IconClose, IconRetry, IconThumbDown, IconThumbUp } from '../../graphics/icons'
 import { fmtDate, fmtMs } from '../api'
-import { LoadState, REFUSAL_LABEL, SectionHead, Seg, Tag, go, href, useLoad } from '../ui'
+import { KIND_TAG, LoadState, REFUSAL_LABEL, SectionHead, Seg, Tag, go, href, useLoad } from '../ui'
 
 /* ============================================================
    Диалоги и отзывы: каждая строка — одна трасса RAG. Клик
@@ -142,7 +142,8 @@ export function Traces({ params }: { params: URLSearchParams }) {
 }
 
 function TraceRowItem({ r }: { r: TraceRow }) {
-  const failed = !r.found && r.mode === 'rag'
+  // Отказ офлайн-модели или сбой: текста ответа нет.
+  const failed = !r.answer && r.mode === 'rag'
   return (
     <li>
       <a className="row" href={href('traces', { id: r.id })}>
@@ -159,6 +160,7 @@ function TraceRowItem({ r }: { r: TraceRow }) {
             <Tag>{r.locale.toUpperCase()}</Tag>
             {r.mode === 'no-rag' && <Tag tone="warn">без RAG</Tag>}
             {failed && <Tag tone="bad">{r.refusalReason ? REFUSAL_LABEL[r.refusalReason] : 'сбой'}</Tag>}
+            {r.kind && <Tag tone={KIND_TAG[r.kind].tone}>{KIND_TAG[r.kind].label}</Tag>}
             {r.fallback && (
               <Tag tone="warn" title="Первая модель цепочки не ответила — сработал fallback">
                 fallback
@@ -232,8 +234,12 @@ function TraceDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             <p className="row__tags">
               <Tag>{data.locale.toUpperCase()}</Tag>
               <Tag tone={data.mode === 'rag' ? 'accent' : 'warn'}>{data.mode === 'rag' ? 'RAG' : 'без RAG'}</Tag>
-              {data.mode === 'rag' && (
-                <Tag tone={data.found ? 'good' : 'bad'}>{data.found ? 'ответ найден' : 'отказ'}</Tag>
+              {data.kind ? (
+                <Tag tone={KIND_TAG[data.kind].tone}>{KIND_TAG[data.kind].label}</Tag>
+              ) : (
+                data.mode === 'rag' && (
+                  <Tag tone={data.found ? 'good' : 'bad'}>{data.found ? 'ответ найден' : 'отказ'}</Tag>
+                )
               )}
               <span className="muted">
                 {fmtDate(data.createdAt)} · {fmtMs(data.totalMs)}
@@ -253,7 +259,7 @@ function TraceDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 </p>
               )}
 
-              {refusal ? (
+              {refusal && !data.answer ? (
                 <div className="msg__bubble msg__bubble--notfound">
                   <p>{c.notFound}</p>
                   <p className="msg__reason">

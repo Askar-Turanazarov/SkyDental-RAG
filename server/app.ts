@@ -94,7 +94,7 @@ app.get('/health', async (c) => {
   return c.json({
     ok: true,
     db: db.driver,
-    index: { ...stats, embedModel: embedModelLabel, needsReindex: stats.stale > 0 },
+    index: { ...stats, embedModel: embedModelLabel, needsReindex: stats.stale > 0 || (stats.documents > 0 && stats.chunks === 0) },
     providers: [...providers.keys()],
     chain: await chainStatus(),
     rag: { topK: env.RAG_TOP_K, minScore: env.RAG_MIN_SCORE },

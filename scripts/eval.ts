@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { NO_ANSWER } from '../shared/protocol.js'
-import type { ChatTurn, Locale, RetrievedChunk } from '../shared/protocol.js'
+import { ANSWER_KINDS, NO_ANSWER } from '../shared/protocol.js'
+import type { AnswerKind, ChatTurn, Locale, RetrievedChunk } from '../shared/protocol.js'
 import { getDb } from '../server/db/client.js'
 import { env } from '../server/env.js'
 import { generateText } from '../server/llm/chain.js'
@@ -8,7 +8,7 @@ import { chain, embedModelLabel, parseChain } from '../server/llm/registry.js'
 import type { ChainEntry } from '../server/llm/registry.js'
 import type { GenerateRequest } from '../server/llm/types.js'
 import { condenseQuestion, realChain } from '../server/rag/answer.js'
-import { formatContext, ragRequest } from '../server/rag/prompt.js'
+import { formatContext, parseKindTag, ragRequest } from '../server/rag/prompt.js'
 import { SHOW_LIMIT, retrieve } from '../server/rag/retrieve.js'
 
 /* ============================================================
@@ -56,6 +56,8 @@ interface GoldenCase {
   /** Темы из topics: любая из них — попадание. */
   expect?: string[]
   expectRefusal?: boolean
+  /** Какие метки вида ответа допустимы (проверяется с --judge). */
+  expectKind?: AnswerKind[]
 }
 
 interface Golden {
@@ -64,8 +66,14 @@ interface Golden {
 }
 
 interface Judged {
-  /** Чем кончилось: отказ по порогу, отказ модели (NO_ANSWER), ответ или сбой. */
+  /**
+   * Чем кончилось: answered — ответ по базе (kb); declined — без фактов
+   * из базы (общая справка, «нет данных», не по теме, приветствие или
+   * NO_ANSWER офлайн-модели); threshold — офлайн-отказ без модели; error — сбой.
+   */
   outcome: 'threshold' | 'declined' | 'answered' | 'error'
+  /** Метка вида ответа, которую поставила модель. */
+  kind: AnswerKind | null
   answer: string
   model: string | null
   /** Оценки судьи — только для outcome 'answered'; null — судья не ответил. */
@@ -133,6 +141,9 @@ function checkGolden(g: Golden) {
     ids.add(c.id)
     if (!c.expectRefusal && !c.expect?.length) throw new Error(`golden.json: у ${c.id} нет ни expect, ни expectRefusal`)
     for (const t of c.expect ?? []) if (!g.topics[t]) throw new Error(`golden.json: у ${c.id} неизвестная тема ${t}`)
+    for (const k of c.expectKind ?? []) {
+      if (!ANSWER_KINDS.includes(k)) throw new Error(`golden.json: у ${c.id} неизвестный вид ответа ${k}`)
+    }
   }
 }
 
@@ -173,21 +184,36 @@ function refusedAt(r: Result, t: number): boolean {
 
 async function judge(r: Result, judgeChain: ChainEntry[]): Promise<Judged> {
   const question = r.condensed ?? r.c.question
-  const out: Judged = { outcome: 'threshold', answer: '', model: null, faithful: null, relevant: null, comment: '' }
-  if (refusedAt(r, env.RAG_MIN_SCORE)) return out
+  const out: Judged = { outcome: 'threshold', kind: null, answer: '', model: null, faithful: null, relevant: null, comment: '' }
+  // Как в answer.ts: порог не пройден — фрагменты в промпт не идут,
+  // но настоящая модель всё равно отвечает (общая справка, «нет данных»…).
+  const below = refusedAt(r, env.RAG_MIN_SCORE)
+  const chunks = below ? r.chunks.map((ch) => ({ ...ch, n: null })) : r.chunks
+  if (below && !realChain.length) return out
 
   try {
-    const res = await generateText(ragRequest(question, r.c.locale, r.chunks))
-    out.answer = res.text.trim()
+    const res = await generateText(
+      ragRequest({
+        question: r.c.question,
+        locale: r.c.locale,
+        history: r.c.history ?? [],
+        chunks,
+        bestScore: r.bestScore,
+        threshold: env.RAG_MIN_SCORE,
+      }),
+    )
+    const tag = parseKindTag(res.text)
+    out.answer = tag.rest.trim()
+    out.kind = tag.kind ?? (/\[\d+\]/.test(out.answer) ? 'kb' : null)
     out.model = `${res.provider}:${res.model}`
   } catch (err) {
     return { ...out, outcome: 'error', comment: `модели не ответили: ${(err as Error).message}` }
   }
-  if (!out.answer || out.answer.startsWith(NO_ANSWER)) return { ...out, outcome: 'declined' }
+  if (!out.answer || out.answer.startsWith(NO_ANSWER) || out.kind !== 'kb') return { ...out, outcome: 'declined' }
   out.outcome = 'answered'
 
   try {
-    const res = await generateText(judgeRequest(question, formatContext(r.chunks), out.answer), judgeChain)
+    const res = await generateText(judgeRequest(question, formatContext(chunks), out.answer), judgeChain)
     const json = res.text.match(/\{[\s\S]*\}/)?.[0]
     if (!json) throw new Error('вернул не JSON')
     const v = JSON.parse(json) as Record<string, unknown>
@@ -280,7 +306,7 @@ function buildReport(results: Result[]) {
   )
   if (outside.length > rightRefusals.length) {
     both(
-      '- Остальные вопросы вне базы уйдут к модели — ей остаётся ответить `NO_ANSWER` (проверяет `--judge`).',
+      '- Остальные вопросы вне базы уйдут к модели с фрагментами — она должна понять, что ответа в них нет (проверяет `--judge`).',
     )
   }
 
@@ -444,12 +470,13 @@ function judgeSection(answerable: Result[], outside: Result[]): [string[], strin
     `Отвечали: ${models.map((m) => `\`${m}\``).join(', ') || '—'}. Судья видит те же фрагменты и проверяет каждое утверждение ответа.`,
     '',
     table(
-      ['', 'Вопросов', 'Ответ', 'Отказ по порогу', 'Отказ модели', 'Сбой', 'Верно по базе', 'По делу'],
+      ['', 'Вопросов', 'Ответ по базе', 'Офлайн-отказ', 'Без фактов из базы', 'Сбой', 'Верно по базе', 'По делу'],
       [row('Из базы', answerable), row('Вне базы', outside)],
     ),
     '',
     `- Вне базы бот отказался (порог + модель): ${of(refusedOutside.length, outside.length)}.`,
     `- Из базы отказался зря: ${of(refusedInside.length, answerable.length)}.`,
+    ...kindLine([...answerable, ...outside]),
   ]
 
   const problems = [
@@ -457,6 +484,7 @@ function judgeSection(answerable: Result[], outside: Result[]): [string[], strin
       ...answerable.filter((r) => r.judged!.outcome === 'answered' && (r.judged!.faithful === false || r.judged!.relevant === false)),
       ...outside.filter((r) => r.judged!.outcome === 'answered'),
       ...[...answerable, ...outside].filter((r) => r.judged!.outcome === 'error' || (r.judged!.outcome === 'answered' && r.judged!.faithful === null)),
+      ...[...answerable, ...outside].filter((r) => !kindMatches(r)),
     ]),
   ]
   const details = problems.length
@@ -465,12 +493,31 @@ function judgeSection(answerable: Result[], outside: Result[]): [string[], strin
         '',
         ...problems.map((r) => {
           const j = r.judged!
-          const verdict = r.c.expectRefusal && j.outcome === 'answered' ? 'ответил вместо отказа' : j.comment || 'см. ответ'
+          const verdict = !kindMatches(r)
+            ? `вид ответа ${j.kind ?? 'без метки'}, ждали ${r.c.expectKind!.join(' / ')}`
+            : r.c.expectRefusal && j.outcome === 'answered'
+              ? 'ответил по базе, хотя ответа в ней нет'
+              : j.comment || 'см. ответ'
           return `- ${caseTitle(r)} — ${verdict}${j.answer ? `\n  > ${clip(j.answer, 300)}` : ''}`
         }),
       ]
     : []
   return [short, details]
+}
+
+/** Совпал ли вид ответа с ожидаемым (нет expectKind — не проверяем). */
+function kindMatches(r: Result): boolean {
+  const want = r.c.expectKind
+  if (!want?.length || !r.judged || r.judged.outcome === 'error' || r.judged.outcome === 'threshold') return true
+  return r.judged.kind !== null && want.includes(r.judged.kind)
+}
+
+function kindLine(rs: Result[]): string[] {
+  const checked = rs.filter((r) => r.c.expectKind?.length && r.judged && r.judged.outcome !== 'error' && r.judged.outcome !== 'threshold')
+  if (!checked.length) return []
+  const wrong = checked.filter((r) => !kindMatches(r)).map((r) => `\`${r.c.id}\` (${r.judged!.kind ?? 'без метки'})`)
+  const tail = wrong.length ? ` — мимо: ${wrong.join(', ')}.` : '.'
+  return [`- Вид ответа (приветствие, не по теме, общая справка, по базе) совпал: ${of(checked.length - wrong.length, checked.length)}${tail}`]
 }
 
 /* ---------- Мелочи ---------- */

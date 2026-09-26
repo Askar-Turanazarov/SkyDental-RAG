@@ -1,5 +1,6 @@
 import { NO_ANSWER } from '../../shared/protocol.js'
 import type {
+  AnswerKind,
   AnswerMeta,
   AnswerSource,
   Attempt,
@@ -13,20 +14,27 @@ import { getDb } from '../db/client.js'
 import { env } from '../env.js'
 import { ChainError, generateText, streamWithFallback } from '../llm/chain.js'
 import { chain, providers } from '../llm/registry.js'
-import { condenseRequest, noRagRequest, ragRequest } from './prompt.js'
+import { condenseRequest, noRagRequest, parseKindTag, ragRequest } from './prompt.js'
 import { retrieve } from './retrieve.js'
 
 /* ============================================================
    ОТВЕТ НА ВОПРОС — весь конвейер RAG по шагам:
 
    1. condense  — follow-up вопрос → самостоятельный (если есть история);
-   2. retrieve  — гибридный поиск кусков; клиенту сразу уходит
-                  событие retrieval с таблицей найденного;
-   3. threshold — лучший кусок слабее порога → честный отказ,
-                  модель даже не вызывается;
-   4. generate  — модель отвечает по кускам, токены идут потоком;
+   2. retrieve  — гибридный поиск кусков;
+   3. threshold — в промпт идут куски, только если лучший не слабее
+                  порога. Не прошёл — модель отвечает без фрагментов:
+                  поздороваться, вернуть к теме, дать общую справку
+                  или честно сказать, что точных данных нет. Клиенту
+                  сразу уходит событие retrieval с таблицей найденного;
+   4. generate  — модель отвечает, токены идут потоком. Первой строкой
+                  она ставит метку вида ответа [[kb]] и т. п. — сервер
+                  её вырезает;
    5. cite      — из ответа достаются сноски [n] → источники;
    6. trace     — всё это пишется в chat_traces для админки.
+
+   Без настоящей модели (офлайн-цепочка local) при непройденном
+   пороге остаётся прежний честный отказ без вызова модели.
    ============================================================ */
 
 export type Emit = (ev: ChatEvent) => Promise<void>
@@ -51,6 +59,12 @@ export async function condenseQuestion(question: string, history: ChatTurn[], si
   }
 }
 
+/** Почему в промпт не попало ничего подходящего — для трассы и «Пробелов базы». */
+function refusalReason(retrieval: RetrievalInfo): RefusalReason {
+  if (retrieval.chunks.some((c) => c.n !== null)) return 'model-declined'
+  return retrieval.chunks.length ? 'below-threshold' : 'no-chunks'
+}
+
 interface Context {
   ipHash: string | null
   signal: AbortSignal
@@ -63,7 +77,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   let retrieveMs = 0
 
   const finish = async (
-    partial: Pick<AnswerMeta, 'found' | 'refusal' | 'sources' | 'provider' | 'model' | 'attempts' | 'usage'>,
+    partial: Pick<AnswerMeta, 'found' | 'kind' | 'refusal' | 'sources' | 'provider' | 'model' | 'attempts' | 'usage'>,
     answer: string,
     generateMs: number,
   ) => {
@@ -85,7 +99,16 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
         void emit({ type: 'token', text: t }),
       )
       await finish(
-        { found: true, refusal: null, sources: [], provider: res.provider, model: res.model, attempts: res.attempts, usage: res.usage },
+        {
+          found: true,
+          kind: null,
+          refusal: null,
+          sources: [],
+          provider: res.provider,
+          model: res.model,
+          attempts: res.attempts,
+          usage: res.usage,
+        },
         res.text,
         Date.now() - g0,
       )
@@ -97,18 +120,20 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
 
   /* ---------- 1. condense ---------- */
   const condensed = await condenseQuestion(req.question, req.history, ctx.signal)
-  // Дальше — и в поиск, и в промпт — идёт самостоятельный вопрос:
-  // истории диалога модель в промпте не видит.
+  // В поиск идёт самостоятельный вопрос; модель же видит исходный
+  // вопрос вместе с последними репликами диалога.
   const searchQuery = condensed ?? req.question
 
-  /* ---------- 2. retrieve ---------- */
+  /* ---------- 2. retrieve + 3. threshold ---------- */
   try {
     const r = await retrieve(searchQuery, req.locale)
     retrieveMs = r.ms
+    const passed = r.bestScore !== null && r.bestScore >= env.RAG_MIN_SCORE
     retrieval = {
       question: req.question,
       condensed,
-      chunks: r.chunks,
+      // Порог не пройден — ни один кусок не идёт в промпт, и таблица это показывает.
+      chunks: passed ? r.chunks : r.chunks.map((c) => ({ ...c, n: null })),
       bestScore: r.bestScore,
       threshold: env.RAG_MIN_SCORE,
       method: 'hybrid',
@@ -121,11 +146,11 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   }
   await emit({ type: 'retrieval', retrieval })
 
-  /* ---------- 3. threshold ---------- */
   const refuse = (reason: RefusalReason, attempts: Attempt[] = [], extra: Partial<AnswerMeta> = {}, generateMs = 0) =>
     finish(
       {
         found: false,
+        kind: null,
         refusal: { reason, bestScore: retrieval!.bestScore, threshold: env.RAG_MIN_SCORE },
         sources: [],
         provider: extra.provider ?? null,
@@ -137,39 +162,65 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
       generateMs,
     )
 
-  if (!retrieval.chunks.length) return refuse('no-chunks')
-  if (retrieval.bestScore === null || retrieval.bestScore < env.RAG_MIN_SCORE) return refuse('below-threshold')
+  const inPrompt = retrieval.chunks.filter((c) => c.n !== null).length
+  // Офлайн-модель умеет только пересказывать фрагменты: без них — честный отказ.
+  if (!inPrompt && !realChain.length) return refuse(refusalReason(retrieval))
 
   /* ---------- 4. generate ---------- */
   const g0 = Date.now()
-  // Модель может ответить маркером NO_ANSWER. Чтобы он не мелькнул
-  // у клиента, начало ответа придерживаем, пока не станет ясно,
-  // что это не маркер.
+  // Начало ответа придерживаем, пока не станет ясно, что это: метка
+  // [[kind]] (её вырезаем) или маркер NO_ANSWER офлайн-модели.
   let held = ''
   let released = false
+  let kindTag: AnswerKind | null = null
+  let shown = ''
+  const show = (t: string) => {
+    // Перевод строки после метки клиенту не нужен.
+    const out = shown ? t : t.trimStart()
+    if (!out) return
+    shown += out
+    void emit({ type: 'token', text: out })
+  }
   const onText = (t: string) => {
-    if (released) return void emit({ type: 'token', text: t })
+    if (released) return show(t)
     held += t
     const probe = held.trimStart()
     if (NO_ANSWER.startsWith(probe) || probe.startsWith(NO_ANSWER)) return
+    const tag = parseKindTag(held)
+    if (tag.pending) return
     released = true
-    void emit({ type: 'token', text: held })
+    kindTag = tag.kind
+    show(tag.rest)
   }
 
   let res
   try {
-    res = await streamWithFallback({ ...ragRequest(searchQuery, req.locale, retrieval.chunks), signal: ctx.signal }, onText)
+    res = await streamWithFallback(
+      {
+        ...ragRequest({
+          question: req.question,
+          locale: req.locale,
+          history: req.history,
+          chunks: retrieval.chunks,
+          bestScore: retrieval.bestScore,
+          threshold: env.RAG_MIN_SCORE,
+        }),
+        signal: ctx.signal,
+      },
+      onText,
+    )
   } catch (err) {
     await fail(err, emit, ctx, req, retrieval)
     return
   }
   const generateMs = Date.now() - g0
-  const text = res.text.trim()
 
+  const parsed = parseKindTag(res.text)
+  const text = parsed.rest.trim()
   if (!text || text.startsWith(NO_ANSWER)) {
-    return refuse('model-declined', res.attempts, res, generateMs)
+    return refuse(refusalReason(retrieval), res.attempts, res, generateMs)
   }
-  if (!released) await emit({ type: 'token', text: held })
+  if (!released) show(text)
 
   /* ---------- 5. cite ---------- */
   const cited = new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])))
@@ -177,8 +228,24 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
     .filter((c) => c.n !== null && cited.has(c.n))
     .map((c) => ({ n: c.n!, source: c.source, text: c.text }))
 
+  // Метка модели главнее; без метки (офлайн-модель) судим по сноскам.
+  let kind: AnswerKind = kindTag ?? parsed.kind ?? (sources.length ? 'kb' : 'general')
+  if (kind === 'general' && sources.length) kind = 'kb'
+
   await finish(
-    { found: true, refusal: null, sources, provider: res.provider, model: res.model, attempts: res.attempts, usage: res.usage },
+    {
+      found: kind === 'kb',
+      kind,
+      refusal:
+        kind === 'missing'
+          ? { reason: refusalReason(retrieval), bestScore: retrieval.bestScore, threshold: env.RAG_MIN_SCORE }
+          : null,
+      sources,
+      provider: res.provider,
+      model: res.model,
+      attempts: res.attempts,
+      usage: res.usage,
+    },
     text,
     generateMs,
   )
@@ -193,6 +260,7 @@ async function fail(err: unknown, emit: Emit, ctx: Context, req?: ChatRequest, r
       traceId: null,
       mode: req.mode ?? 'rag',
       found: false,
+      kind: null,
       refusal: null,
       sources: [],
       provider: null,
@@ -214,10 +282,14 @@ async function saveTrace(
 ): Promise<string | null> {
   try {
     const db = await getDb()
+    // JSON уходит строкой и приводится через ::text::jsonb: так его
+    // одинаково понимают и PGlite, и postgres.js (тот при голом ::jsonb
+    // кодирует строку в JSON ещё раз и в базу пишется строка, не объект).
     const [row] = await db.query<{ id: string }>(
-      `insert into chat_traces (locale, mode, question, condensed_question, retrieval, answer, found, refusal,
-                                provider, model, attempts, timings, usage, ip_hash)
-       values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb, $14)
+      `insert into chat_traces (locale, mode, question, condensed_question, retrieval, answer, found, answer_kind,
+                                refusal, provider, model, attempts, timings, usage, ip_hash)
+       values ($1, $2, $3, $4, $5::text::jsonb, $6, $7, $8, $9::text::jsonb, $10, $11,
+               $12::text::jsonb, $13::text::jsonb, $14::text::jsonb, $15)
        returning id`,
       [
         req.locale,
@@ -227,6 +299,7 @@ async function saveTrace(
         retrieval ? JSON.stringify(retrieval) : null,
         answer,
         meta.found,
+        meta.kind,
         meta.refusal ? JSON.stringify(meta.refusal) : null,
         meta.provider,
         meta.model,

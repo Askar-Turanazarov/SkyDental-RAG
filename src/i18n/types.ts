@@ -190,6 +190,12 @@ export interface Dict {
       noChunks: string
       modelDeclined: string
     }
+    /** Плашка под ответом: откуда он взялся. */
+    kind: {
+      kb: string
+      general: string
+      missing: string
+    }
     trace: {
       summary: string
       /** {n} — фрагментов в промпте, {ms} — время поиска. */

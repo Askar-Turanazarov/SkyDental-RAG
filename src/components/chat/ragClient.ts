@@ -1,5 +1,5 @@
 import { sseData } from '../../../shared/sse.js'
-import type { ChatEvent, ChatRequest, RetrievedChunk } from '../../../shared/protocol.js'
+import type { AnswerKind, AnswerMeta, ChatEvent, ChatRequest, RetrievedChunk } from '../../../shared/protocol.js'
 import { searchMockKnowledge } from './mockKnowledge'
 
 export type { AnswerMeta, ChatEvent, ChatTurn, RetrievalInfo, RetrievedChunk } from '../../../shared/protocol.js'
@@ -96,7 +96,7 @@ const mockRagClient: RagClient = {
           ? 'В демо-режиме модели нет — сравнение «без RAG» работает только с настоящим бэкендом.'
           : 'Demo rejimda model yoʻq — «RAGsiz» taqqoslash faqat haqiqiy backend bilan ishlaydi.'
       onEvent({ type: 'token', text })
-      onEvent({ type: 'done', meta: demoMeta(req, false, [], started, 0) })
+      onEvent({ type: 'done', meta: demoMeta(req, null, [], started, 0) })
       return
     }
 
@@ -128,7 +128,7 @@ const mockRagClient: RagClient = {
     })
 
     if (!chunks.length) {
-      onEvent({ type: 'done', meta: demoMeta(req, false, [], started, retrieveMs) })
+      onEvent({ type: 'done', meta: demoMeta(req, null, [], started, retrieveMs) })
       return
     }
 
@@ -140,7 +140,7 @@ const mockRagClient: RagClient = {
       onEvent({ type: 'token', text: word })
     }
     const sources = [{ n: 1, source: chunks[0].source, text: chunks[0].text }]
-    onEvent({ type: 'done', meta: demoMeta(req, true, sources, started, retrieveMs) })
+    onEvent({ type: 'done', meta: demoMeta(req, 'kb', sources, started, retrieveMs) })
   },
 
   async feedback() {
@@ -150,17 +150,20 @@ const mockRagClient: RagClient = {
 
 function demoMeta(
   req: ChatRequest,
-  found: boolean,
+  kind: AnswerKind | null,
   sources: { n: number; source: string; text: string }[],
   started: number,
   retrieveMs: number,
-) {
+): AnswerMeta {
   const totalMs = Math.round(performance.now() - started)
+  const mode = req.mode ?? 'rag'
   return {
     traceId: null,
-    mode: req.mode ?? 'rag',
-    found,
-    refusal: found ? null : { reason: 'no-chunks' as const, bestScore: null, threshold: 0 },
+    mode,
+    found: kind === 'kb',
+    kind,
+    // Как офлайн-модель на сервере: без фрагментов — честный отказ.
+    refusal: kind === null && mode === 'rag' ? { reason: 'no-chunks', bestScore: null, threshold: 0 } : null,
     sources,
     provider: 'demo',
     model: 'keyword-search',

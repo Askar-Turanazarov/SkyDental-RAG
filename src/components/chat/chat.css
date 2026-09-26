@@ -836,3 +836,10 @@
   .source-chip:active,
   .chat__send:active:not(:disabled) { transform: none; }
 }
+
+/* Откуда ответ: общая справка или «в материалах нет». */
+.msg__kind {
+  margin-top: var(--s-3);
+  font-size: var(--text-caption);
+  color: var(--content-secondary);
+}

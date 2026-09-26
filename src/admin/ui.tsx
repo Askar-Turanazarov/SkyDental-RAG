@@ -5,6 +5,7 @@ import type { ThemePref } from '../theme/ThemeContext'
 import { IconAuto, IconMoon, IconSun } from '../graphics/icons'
 import { useSegThumb } from '../components/useSegThumb'
 import { ApiError, AuthError, api } from './api'
+import type { AnswerKind } from '../../shared/protocol'
 
 /* ============================================================
    Общие кусочки админки: загрузка данных, сегментный выбор,
@@ -169,7 +170,16 @@ export const REFUSAL_LABEL = {
   'model-declined': 'модель не нашла',
 } as const
 
-export const f2 = (v: number | null) => (v === null ? '—' : v.toFixed(2))
+/** Вид ответа по метке модели: подпись и цвет тега. */
+export const KIND_TAG: Record<AnswerKind, { label: string; tone: Tone }> = {
+  kb: { label: 'из базы', tone: 'good' },
+  general: { label: 'общая справка', tone: 'accent' },
+  missing: { label: 'нет в базе', tone: 'bad' },
+  offtopic: { label: 'не по теме', tone: 'neutral' },
+  smalltalk: { label: 'приветствие', tone: 'neutral' },
+}
+
+export const f2 =(v: number | null) => (v === null ? '—' : v.toFixed(2))
 
 /* ---------- Маршрут в hash: #/kb?doc=3 ---------- */
 
