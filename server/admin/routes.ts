@@ -461,7 +461,7 @@ admin.get('/models', async (c) => {
   return c.json<ModelsInfo>({
     providers: KNOWN_PROVIDERS.map((id) => ({ id, connected: providers.has(id) })),
     chain: await chainStatus(),
-    embed: { label: embedModelLabel, ...stats, needsReindex: stats.stale > 0 },
+    embed: { label: embedModelLabel, ...stats, needsReindex: stats.stale > 0 || (stats.documents > 0 && stats.chunks === 0) },
     rag: { topK: env.RAG_TOP_K, minScore: env.RAG_MIN_SCORE },
     db: db.driver,
   })
