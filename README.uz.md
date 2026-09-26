@@ -43,7 +43,7 @@ Har bir javob ostida **«Javobni qanday topdim»** paneli bor:
 | --- | --- |
 | Asl va qayta yozilgan savol | *«U qancha turadi?»* kabi aniqlashtiruvchi savollar qidiruvdan oldin mustaqil savolga aylantiriladi |
 | vector, text va RRF baholari va «promptda» belgisi bilan top-k parchalar | Maʼno va soʻzlar boʻyicha gibrid qidiruv, Reciprocal Rank Fusion orqali birlashtirilgan |
-| Yaqinlik chegarasi va eng yaxshi moslik | Chegaradan past boʻlsa, bot LLMʼni umuman chaqirmay rad etadi |
+| Yaqinlik chegarasi va eng yaxshi moslik | Chegaradan past boʻlsa, promptga birorta parcha kirmaydi va model narxni oʻzidan ololmaydi |
 | Model, fallback urinishlari, vaqt, tokenlar | Qaysi model javob berdi va undan oldin nima boʻldi |
 
 **Talaba rejimi** (chat sarlavhasidagi almashtirgich) izni toʻliq ochadi va tugma qoʻshadi:
@@ -67,8 +67,9 @@ flowchart LR
   V --> R[RRF birlashtirish → top K]
   K --> R
   R --> T{Eng yaxshi baho ≥<br/>RAG_MIN_SCORE?}
-  T -- yoʻq --> X([LLM chaqirmasdan rad etish])
+  T -- yoʻq --> X[Parchalarsiz<br/>prompt]
   T -- ha --> P[Raqamlangan<br/>parchalar bilan prompt]
+  X --> L
   P --> L[Fallback bilan<br/>LLM zanjiri]
   L --> S([SSE: retrieval → token… → done])
 ```
@@ -87,11 +88,19 @@ flowchart LR
    RRF (k = 60) orqali birlashtiriladi. RRF «xom» baholarni emas, oʻrinlarni qoʻshadi: ikki
    qidiruvning shkalalari har xil. Oʻzbekcha savol ruscha parchani topadi. Ikki kichik bonus teng
    oʻrinlarni ajratadi: savol tilidagi parchalar va savol narx haqida boʻlsa, narxlar roʻyxati.
-4. **Chegara.** Eng yaxshi kosinus yaqinligi `RAG_MIN_SCORE` dan past boʻlsa, bot darhol rad etadi va
+4. **Chegara.** Parchalar promptga faqat eng yaxshi kosinus yaqinligi `RAG_MIN_SCORE` dan past
+   boʻlmasa kiradi. Chegaradan past boʻlsa, model baribir javob beradi, lekin parchalarsiz:
+   salomlashadi, stomatologiya mavzusiga qaytaradi yoki klinika materiallarida aniq maʼlumot
+   yoʻqligini aytadi. Oflayn `local` modelning javob berishga materiali yoʻq — u rad etadi va
    ikkala sonni aytadi.
-5. **Prompt** (`server/rag/prompt.ts`). Koʻrsatma foydalanuvchi tilida: faqat raqamlangan
-   parchalar boʻyicha javob berish, `[n]` havolalarini qoʻyish, javob boʻlmasa `NO_ANSWER` belgisini
-   qaytarish.
+5. **Prompt** (`server/rag/prompt.ts`). Foydalanuvchi tilida bitta tizim prompti: xushmuomala
+   stomatolog-maslahatchi. Klinika faktlari (narxlar, muddatlar, jadval, manzil) — faqat
+   raqamlangan parchalardan, `[n]` havolalari bilan. Odatiy stomatologik savolga qisqa umumiy
+   maʼlumot berish mumkin; alomatlarga — tashxissiz, shifokorga yoʻllab. Parchalar, tarix va savol
+   `<context>` / `<question>` ichida beriladi va koʻrsatma emas, maʼlumot deb hisoblanadi. Model
+   suhbatning oxirgi 4 replikasini koʻradi. Javobning birinchi qatori — javob turi belgisi:
+   `[[kb]]`, `[[general]]`, `[[missing]]`, `[[offtopic]]` yoki `[[smalltalk]]`. Server uni kesib
+   tashlaydi, chatda belgi koʻrsatadi va turini izga yozadi.
 6. **Generatsiya** modellar zanjiri (`server/llm/chain.ts`) orqali oqim bilan boradi.
 7. **Protokol** (`shared/protocol.ts`). Chat Server-Sent Events oladi: `retrieval`, keyin `token`
    hodisalari, keyin iz id, manbalar, model, urinishlar, vaqt va tokenlar sarfi bilan `done`. Xato
@@ -179,7 +188,7 @@ Barcha oʻzgaruvchilar [`.env.example`](.env.example) da tasvirlangan. Asosiylar
 | `GEMINI_THINKING_LEVEL` | `minimal` | Gemini 3 reasoning darajasi: `minimal`, `low` yoki `off` |
 | `EMBED_PROVIDER`, `EMBED_MODEL` | `gemini`, `gemini-embedding-001` | Embeddinglar. Almashtirilgandan keyin qayta indekslash kerak |
 | `RAG_TOP_K` | `5` | Promptga nechta parcha tushadi |
-| `RAG_MIN_SCORE` | `0.6` | Rad etish uchun yaqinlik chegarasi. `npm run eval` bilan tanlanadi |
+| `RAG_MIN_SCORE` | `0.6` | Parchalar promptga kiradigan yaqinlik chegarasi. `npm run eval` yoki admin qumdonida tanlanadi |
 | `ADMIN_PASSWORD` | boʻsh | Admin panel paroli. Boʻsh — admin panel oʻchiq |
 | `ADMIN_SECRET` | hosil qilinadi | Admin cookie imzosi uchun sir. Yaratish: `openssl rand -hex 32` |
 | `IP_SALT` | ishlab chiqish qiymati | IP xeshi uchun tuz. Prodakshnda oʻzingiznikini bering |
@@ -317,8 +326,8 @@ Boshlangʻich maʼlumotlar oddiy markdownʼda:
 
 ```
 content/rag/
-├── ru/{prices,faq,schedule}.md
-└── uz/{prices,faq,schedule}.md
+├── ru/{prices,faq,schedule,services,about}.md
+└── uz/{prices,faq,schedule,services,about}.md
 ```
 
 `npm run seed` bu fayllarni bazaga yuklaydi. Shundan keyin **haqiqat manbai — baza**. Bilimlar

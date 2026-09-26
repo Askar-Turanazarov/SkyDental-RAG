@@ -43,7 +43,7 @@ Every answer has a **"How I found the answer"** panel:
 | --- | --- |
 | The original and the rewritten question | Follow-ups like *"and how much is it?"* are rewritten into standalone questions before the search |
 | Top-k fragments with vector, text and RRF scores, plus an "in prompt" mark | Hybrid search by meaning and by keywords, merged with Reciprocal Rank Fusion |
-| Similarity threshold and best match | Below the threshold the bot refuses without calling the LLM at all |
+| Similarity threshold and best match | Below the threshold no fragment reaches the prompt, so the model cannot quote a price it did not find |
 | Model, fallback attempts, timings, tokens | Which model answered, and what happened before it did |
 
 **Student mode** (the toggle in the chat header) opens the full trace and adds a button: *"Ask
@@ -67,8 +67,9 @@ flowchart LR
   V --> R[RRF merge → top K]
   K --> R
   R --> T{Best score ≥<br/>RAG_MIN_SCORE?}
-  T -- no --> X([Refusal, no LLM call])
+  T -- no --> X[Prompt without<br/>fragments]
   T -- yes --> P[Prompt with<br/>numbered fragments]
+  X --> L
   P --> L[LLM chain<br/>with fallback]
   L --> S([SSE: retrieval → token… → done])
 ```
@@ -88,11 +89,18 @@ flowchart LR
    searches use different scales. A question in Uzbek can find a Russian fragment. Two small
    bonuses break ties: fragments in the question's language, and price documents when the question
    is about prices.
-4. **Threshold.** If the best cosine similarity is below `RAG_MIN_SCORE`, the bot refuses right
-   away, and the refusal includes both numbers.
-5. **Prompt** (`server/rag/prompt.ts`). The instruction is in the user's language: answer only
-   from the numbered fragments, cite them as `[n]`, and reply with the `NO_ANSWER` marker when
-   the answer is not there.
+4. **Threshold.** Fragments go into the prompt only if the best cosine similarity reaches
+   `RAG_MIN_SCORE`. Below it the model still answers, but without fragments, so it can greet,
+   steer back to dentistry or say that the clinic's materials have no exact data. The offline
+   `local` model has nothing to answer with, so it refuses and names both numbers.
+5. **Prompt** (`server/rag/prompt.ts`). One system prompt in the user's language: a polite dental
+   consultant. Clinic facts (prices, terms, schedule, address) come only from the numbered
+   fragments with `[n]` citations. Typical dental questions may get a short general answer; symptoms
+   get no diagnosis, just a referral to a doctor. Fragments, history and the question are wrapped
+   in `<context>` / `<question>` and treated as data, not instructions. The last 4 turns of the
+   dialog go along. The first line of the reply is a kind tag, `[[kb]]`, `[[general]]`,
+   `[[missing]]`, `[[offtopic]]` or `[[smalltalk]]`. The server strips it, shows a badge in the chat
+   and stores the kind in the trace.
 6. **Generation** goes through the model chain (`server/llm/chain.ts`) and is streamed.
 7. **Protocol** (`shared/protocol.ts`). The chat receives Server-Sent Events: `retrieval`, then
    `token` events, then `done`, which carries the trace id, sources, model, attempts, timings and
@@ -180,7 +188,7 @@ Everything is described in [`.env.example`](.env.example). The main variables:
 | `GEMINI_THINKING_LEVEL` | `minimal` | Reasoning level for Gemini 3: `minimal`, `low` or `off` |
 | `EMBED_PROVIDER`, `EMBED_MODEL` | `gemini`, `gemini-embedding-001` | Embeddings. Changing them requires a reindex |
 | `RAG_TOP_K` | `5` | How many fragments go into the prompt |
-| `RAG_MIN_SCORE` | `0.6` | Similarity threshold for refusing. Tune it with `npm run eval` |
+| `RAG_MIN_SCORE` | `0.6` | Similarity threshold for putting fragments into the prompt. Tune it with `npm run eval` or the admin sandbox |
 | `ADMIN_PASSWORD` | empty | Admin password. Empty disables the admin panel |
 | `ADMIN_SECRET` | derived | Secret for signing the admin cookie. Generate one: `openssl rand -hex 32` |
 | `IP_SALT` | dev value | Salt for hashing IP addresses. Set your own in production |
@@ -317,8 +325,8 @@ The starting data lives in plain markdown:
 
 ```
 content/rag/
-├── ru/{prices,faq,schedule}.md
-└── uz/{prices,faq,schedule}.md
+├── ru/{prices,faq,schedule,services,about}.md
+└── uz/{prices,faq,schedule,services,about}.md
 ```
 
 `npm run seed` loads these files into the database. From then on the **database is the source of
