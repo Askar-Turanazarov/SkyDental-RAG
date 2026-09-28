@@ -10,7 +10,9 @@ import { env } from '../env.js'
    десятков строк на node:crypto, поэтому без пакета googleapis.
    ============================================================ */
 
-const SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
+// Drive — только чтение (база знаний); Таблицы — запись копии записей на приём.
+// Доступ всё равно ограничен тем, что открыли сервисному аккаунту.
+const SCOPE = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 
 interface ServiceAccount {

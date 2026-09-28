@@ -5,6 +5,7 @@ import type { BookingError, BookingResponse, SlotsResponse } from '../../shared/
 import { clientIp, hashIp, overLimit } from '../rateLimit.js'
 import { BookingFailure, createAppointment, freeSlots } from './appointments.js'
 import { listDoctors } from './doctors.js'
+import { pushToSheetSoon } from './sheet.js'
 
 /* ============================================================
    /api/booking — публичный API записи на приём.
@@ -79,6 +80,9 @@ booking.post('/', async (c) => {
 
   try {
     const appointment = await createAppointment({ ...parsed.data, ipHash })
+    // Копия в Google Таблицу. Сбой или задержка Google не отменяют запись:
+    // строка уйдёт со следующей попыткой.
+    await pushToSheetSoon()
     return c.json({ appointment } satisfies BookingResponse, 201)
   } catch (err) {
     if (!(err instanceof BookingFailure)) throw err

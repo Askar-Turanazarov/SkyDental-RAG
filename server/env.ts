@@ -55,6 +55,8 @@ const schema = z.object({
   GOOGLE_SERVICE_ACCOUNT_JSON: optional,
   /** Не чаще раза в столько секунд сервер спрашивает Drive, изменились ли файлы. */
   DRIVE_SYNC_INTERVAL_SEC: num(20),
+  /** Google Таблица для копии записей на приём: id или ссылка. Пусто — только база. */
+  GOOGLE_BOOKINGS_SHEET_ID: optional.transform((v) => v?.match(/\/d\/([\w-]+)/)?.[1] ?? v),
 
   /** Порт локального API. Не PORT: его подставляют хостинги и превью
    *  для веб-сервера, и API занял бы порт Vite. */

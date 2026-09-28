@@ -178,7 +178,22 @@ create table if not exists appointments (
   cancelled_at   timestamptz,
   ip_hash        text
 );
+
+-- Отправка в Google Таблицу: «замок», чтобы две функции не дописали
+-- одну запись дважды, и итог последней попытки для админки.
+create table if not exists sheet_state (
+  id            int primary key check (id = 1),
+  locked_until  timestamptz not null,
+  last_ok_at    timestamptz,
+  last_error    text
+);
+insert into sheet_state (id, locked_until) values (1, 'epoch') on conflict do nothing;
 -- Защита от двойной записи: у врача на одно время — одна активная
 -- запись. Держит сама база, даже при одновременных запросах.
 create unique index if not exists appointments_slot_uniq on appointments (doctor_id, starts_at) where status = 'booked';
 create index if not exists appointments_starts_idx on appointments (starts_at);
+
+-- Копия в Google Таблице: запись ждёт отправки, пока sheet_synced_at
+-- пуст или раньше changed_at (запись создали или отменили после неё).
+alter table appointments add column if not exists changed_at timestamptz not null default now();
+alter table appointments add column if not exists sheet_synced_at timestamptz;
