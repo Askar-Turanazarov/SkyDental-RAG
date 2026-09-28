@@ -49,6 +49,13 @@ const schema = z.object({
   RATE_LIMIT_MAX: num(20),
   RATE_LIMIT_WINDOW_SEC: num(600),
 
+  /** Папка базы знаний в Google Drive (id из адреса папки). Пусто — синхронизация выключена. */
+  GOOGLE_DRIVE_FOLDER_ID: optional,
+  /** JSON-ключ сервисного аккаунта Google: целиком или в base64. */
+  GOOGLE_SERVICE_ACCOUNT_JSON: optional,
+  /** Не чаще раза в столько секунд сервер спрашивает Drive, изменились ли файлы. */
+  DRIVE_SYNC_INTERVAL_SEC: num(20),
+
   /** Порт локального API. Не PORT: его подставляют хостинги и превью
    *  для веб-сервера, и API занял бы порт Vite. */
   API_PORT: num(8787),
