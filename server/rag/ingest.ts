@@ -109,7 +109,11 @@ export async function saveDocument(input: SaveDocumentInput): Promise<{ id: numb
   )
 
   if (current && current.body_md === input.bodyMd) {
-    return { id: current.id, version: current.version, changed: false, index: null }
+    // Текст тот же, но индекс мог не досчитаться в прошлый раз (например,
+    // лимит эмбеддингов): сверяем его. Готовые векторы берутся повторно,
+    // так что при целом индексе модель эмбеддингов не вызывается.
+    const index = input.index === false ? null : await indexDocument(current.id)
+    return { id: current.id, version: current.version, changed: false, index }
   }
 
   let id: number

@@ -81,6 +81,23 @@ async function acquire(force: boolean): Promise<boolean> {
 
 const errorText = (err: unknown) => String((err as Error)?.message ?? err).slice(0, 500)
 
+/**
+ * Ошибка в журнал — только если она новая: та же ошибка того же
+ * документа, повторённая после неё без удачных записей, не пишется.
+ * Иначе при сбое журнал рос бы на строку каждые 20 секунд.
+ */
+async function logError(trigger: SyncTrigger, e: Partial<LogInput> & { message: string }): Promise<SyncLogEntry | null> {
+  const db = await getDb()
+  const [seen] = await db.query(
+    `select 1 from sync_log
+     where action = 'error' and message = $1 and coalesce(locale, '') = $2 and coalesce(slug, '') = $3
+       and id > coalesce((select max(id) from sync_log where action <> 'error'), 0)
+     limit 1`,
+    [e.message, e.locale ?? '', e.slug ?? ''],
+  )
+  return seen ? null : log(trigger, { ...e, action: 'error' })
+}
+
 async function syncFile(trigger: SyncTrigger, f: DriveFile, doc: DocState | undefined): Promise<SyncLogEntry | null> {
   const db = await getDb()
   const bodyMd = await officeToMarkdown(f.kind, await download(f))
@@ -94,7 +111,20 @@ async function syncFile(trigger: SyncTrigger, f: DriveFile, doc: DocState | unde
 
   const base = { locale: f.locale, slug: f.slug, fileName: f.name, version: res.version }
   if (!res.changed) {
-    // Текст тот же. Отмечаем только первое подключение документа к Drive.
+    // Текст тот же, но индекс мог досчитаться только сейчас: прошлая
+    // попытка сохранила текст и упала на эмбеддингах.
+    if (res.index?.embedded) {
+      return log(trigger, {
+        ...base,
+        action: 'updated',
+        linesAdded: 0,
+        linesRemoved: 0,
+        chunksEmbedded: res.index.embedded,
+        chunksTotal: res.index.total,
+        message: 'индекс досчитан после прошлой ошибки',
+      })
+    }
+    // Отмечаем только первое подключение документа к Drive.
     return doc?.source === 'drive' ? null : log(trigger, { ...base, action: 'linked' })
   }
   const diff = lineDiff(doc?.body_md ?? '', bodyMd)
@@ -117,10 +147,8 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
   try {
     files = await listFolder()
   } catch (err) {
-    // Одна и та же ошибка каждые 20 секунд не нужна в журнале: пишем, только если она новая.
-    const message = errorText(err)
-    const [last] = await db.query<{ message: string | null }>('select message from sync_log order by id desc limit 1')
-    if (last?.message !== message) changes.push(await log(trigger, { action: 'error', message }))
+    const entry = await logError(trigger, { message: errorText(err) })
+    if (entry) changes.push(entry)
     return { checked: true, files: 0, changes }
   }
 
@@ -137,16 +165,33 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
       if (entry) changes.push(entry)
     } catch (err) {
       console.error('[sync]', f.name, err)
-      changes.push(await log(trigger, { locale: f.locale, slug: f.slug, fileName: f.name, action: 'error', message: errorText(err) }))
+      const entry = await logError(trigger, { locale: f.locale, slug: f.slug, fileName: f.name, message: errorText(err) })
+      if (entry) changes.push(entry)
     }
   }
 
   // Удалённые из Drive: только документы, которые пришли из Drive.
+  // Страховка: если в подпапке языка не нашлось ни одного файла, это
+  // скорее переименованная, перемещённая или закрытая папка, чем
+  // намеренная чистка, — документы этого языка не трогаем, а пишем ошибку.
   const present = new Set(files.map((f) => `${f.locale}/${f.slug}`))
+  const localesWithFiles = new Set(files.map((f) => f.locale))
+  const guarded = new Set<Locale>()
   for (const d of docs) {
     if (d.source !== 'drive' || present.has(`${d.locale}/${d.slug}`)) continue
+    if (!localesWithFiles.has(d.locale)) {
+      guarded.add(d.locale)
+      continue
+    }
     await db.query('delete from documents where id = $1', [d.id])
     changes.push(await log(trigger, { locale: d.locale, slug: d.slug, action: 'removed' }))
+  }
+  for (const locale of guarded) {
+    const entry = await logError(trigger, {
+      locale,
+      message: `В подпапке ${locale}/ нет ни одного файла Word или Excel. Документы этого языка не удалены: проверьте, что папка на месте, называется «${locale}» и открыта сервисному аккаунту.`,
+    })
+    if (entry) changes.push(entry)
   }
 
   return { checked: true, files: files.length, changes }
