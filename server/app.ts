@@ -7,6 +7,7 @@ import { env } from './env.js'
 import { chainStatus } from './llm/chain.js'
 import { chain, embedModelLabel, providers } from './llm/registry.js'
 import admin from './admin/routes.js'
+import booking from './booking/routes.js'
 import { answerQuestion } from './rag/answer.js'
 import { clientIp, hashIp, overLimit } from './rateLimit.js'
 
@@ -101,6 +102,9 @@ app.get('/health', async (c) => {
     configuredChain: chain.map((e) => `${e.provider}:${e.model}`),
   })
 })
+
+/** Запись на приём: /api/booking/* (server/booking/routes.ts). */
+app.route('/booking', booking)
 
 /** Админка: /api/admin/* (server/admin/routes.ts). */
 app.route('/admin', admin)

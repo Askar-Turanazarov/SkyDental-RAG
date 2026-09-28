@@ -157,3 +157,28 @@ create table if not exists doctors (
   active        boolean not null default true,
   updated_at    timestamptz not null default now()
 );
+
+-- Записи пациентов. Первичный приём: ends_at = starts_at + 1 час.
+-- Отменённая запись остаётся в таблице (status = 'cancelled') и
+-- освобождает окно.
+create table if not exists appointments (
+  id             serial primary key,
+  code           text not null unique,
+  doctor_id      text not null references doctors(id),
+  service        text not null,
+  starts_at      timestamptz not null,
+  ends_at        timestamptz not null,
+  patient_name   text not null,
+  patient_phone  text not null,
+  comment        text,
+  locale         text not null,
+  source         text not null default 'site' check (source in ('site', 'chat')),
+  status         text not null default 'booked' check (status in ('booked', 'cancelled')),
+  created_at     timestamptz not null default now(),
+  cancelled_at   timestamptz,
+  ip_hash        text
+);
+-- Защита от двойной записи: у врача на одно время — одна активная
+-- запись. Держит сама база, даже при одновременных запросах.
+create unique index if not exists appointments_slot_uniq on appointments (doctor_id, starts_at) where status = 'booked';
+create index if not exists appointments_starts_idx on appointments (starts_at);
