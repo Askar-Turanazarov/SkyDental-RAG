@@ -8,9 +8,10 @@ import { LoadState, Notice, SectionHead, Tag, errorText, go, href, useLoad } fro
 import { DocEditor, saveMessage } from './DocEditor'
 
 /* ============================================================
-   База знаний. Источник правды — таблица documents в Neon; md-файлы
-   из content/rag — только начальное наполнение (npm run seed).
-   Любая правка — новая версия + переиндексация изменённых кусков.
+   База знаний. С подключённым Google Drive источник правды — файлы
+   в папке Drive (server/rag/sync.ts), здесь они только для чтения.
+   Без Drive — таблица documents в Neon, правка прямо здесь.
+   Любое изменение — новая версия + переиндексация изменённых кусков.
    ============================================================ */
 
 export function Knowledge({ params }: { params: URLSearchParams }) {
@@ -46,17 +47,24 @@ export function Knowledge({ params }: { params: URLSearchParams }) {
 
   const stale = docs.data?.reduce((s, d) => s + d.stale, 0) ?? 0
   const groups = groupBySlug(docs.data ?? [])
+  const fromDrive = docs.data?.some((d) => d.source === 'drive') ?? false
 
   return (
     <>
       <SectionHead
         title="База знаний"
-        lede="Документы, из которых бот берёт ответы. Каждый режется на фрагменты: раздел ## — один фрагмент, строка таблицы — отдельный. Сохранение создаёт новую версию и пересчитывает эмбеддинги только у изменившихся фрагментов."
+        lede={
+          fromDrive
+            ? 'Документы, из которых бот берёт ответы. Источник — папка Google Drive: правьте файлы там, бот подхватит изменения при следующем вопросе. Каждый документ режется на фрагменты: раздел — один фрагмент, строка таблицы — отдельный.'
+            : 'Документы, из которых бот берёт ответы. Каждый режется на фрагменты: раздел ## — один фрагмент, строка таблицы — отдельный. Сохранение создаёт новую версию и пересчитывает эмбеддинги только у изменившихся фрагментов.'
+        }
         actions={
           <>
-            <button type="button" className="btn btn--secondary btn--small" onClick={() => setCreating(true)}>
-              Новый документ
-            </button>
+            {!fromDrive && (
+              <button type="button" className="btn btn--secondary btn--small" onClick={() => setCreating(true)}>
+                Новый документ
+              </button>
+            )}
             <a className="btn btn--secondary btn--small" href="/api/admin/export" download>
               Экспорт .zip
             </a>
@@ -94,6 +102,7 @@ export function Knowledge({ params }: { params: URLSearchParams }) {
                     <span className="kb__doc-meta">
                       v{d.version} · {d.chunks} фрагм. · {fmtDate(d.updatedAt)}
                       {d.isPrice && <> · прайс</>}
+                      {d.source === 'drive' && <Tag tone="accent">Drive</Tag>}
                       {d.stale > 0 && <Tag tone="warn">устарел индекс</Tag>}
                     </span>
                   </a>

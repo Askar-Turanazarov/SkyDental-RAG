@@ -8,6 +8,7 @@ import { Traces } from './sections/Traces'
 import { Gaps } from './sections/Gaps'
 import { Stats } from './sections/Stats'
 import { Knowledge } from './sections/Knowledge'
+import { Sync } from './sections/Sync'
 import { Models } from './sections/Models'
 import { Sandbox } from './sections/Sandbox'
 
@@ -22,7 +23,8 @@ const SECTIONS = [
   { id: 'traces', title: 'Диалоги и отзывы', hint: 'Вопросы, найденные фрагменты, оценки' },
   { id: 'gaps', title: 'Пробелы базы', hint: 'На что бот не нашёл ответа' },
   { id: 'stats', title: 'Статистика', hint: 'Отказы, fallback, задержка' },
-  { id: 'kb', title: 'База знаний', hint: 'Правка, версии, экспорт' },
+  { id: 'kb', title: 'База знаний', hint: 'Документы, версии, экспорт' },
+  { id: 'sync', title: 'Синхронизация', hint: 'Google Drive и журнал изменений' },
   { id: 'models', title: 'Модели', hint: 'Цепочка LLM и эмбеддинги' },
   { id: 'sandbox', title: 'Песочница поиска', hint: 'Поиск и промпт без генерации' },
 ] as const
@@ -151,6 +153,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           {current.id === 'gaps' && <Gaps />}
           {current.id === 'stats' && <Stats />}
           {current.id === 'kb' && <Knowledge params={route.params} />}
+          {current.id === 'sync' && <Sync />}
           {current.id === 'models' && <Models />}
           {current.id === 'sandbox' && <Sandbox />}
         </main>

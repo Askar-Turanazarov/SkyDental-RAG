@@ -4,10 +4,10 @@ import type { DocumentDetail, DocumentVersion, SaveResult } from '../../../share
 import type { Locale } from '../../../shared/protocol'
 import { chunkMarkdown } from '../../../shared/chunker'
 import type { Chunk } from '../../../shared/chunker'
-import { IconClose } from '../../graphics/icons'
+import { IconArrowUpRight, IconClose } from '../../graphics/icons'
 import { api, download, fmtDate } from '../api'
 import { lineDiff } from '../../../shared/diff'
-import { Notice, Seg, Tag, errorText } from '../ui'
+import { Notice, Seg, Tag, errorText, href } from '../ui'
 
 /* ============================================================
    Редактор документа. Справа — живое превью нарезки тем же
@@ -70,7 +70,8 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
       (d) => {
         if (!alive) return
         setDoc(d)
-        const q = appendRef.current
+        // В документ из Drive шаблон не вставляем: он правится только в Drive.
+        const q = d.source === 'drive' ? null : appendRef.current
         setDraft(q ? withQuestion(d.bodyMd, q, d.locale) : d.bodyMd)
       },
       (err) => alive && setError(errorText(err)),
@@ -83,7 +84,7 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
   // Шаблон под вопрос подставлен — выделяем заглушку, чтобы сразу печатать ответ.
   useEffect(() => {
     const ta = textRef.current
-    if (!doc || !appendRef.current || !ta) return
+    if (!doc || doc.source === 'drive' || !appendRef.current || !ta) return
     appendRef.current = null
     const start = ta.value.lastIndexOf(PLACEHOLDER[doc.locale])
     ta.focus()
@@ -163,6 +164,8 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
   }
 
   if (!doc) return error ? <Notice tone="bad">{error}</Notice> : <p className="muted">Загружаю документ…</p>
+  // Документ из Google Drive правится только там: здесь просмотр, нарезка и история.
+  const drive = doc.source === 'drive'
 
   return (
     <div className="stack">
@@ -173,8 +176,9 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
           </h2>
           <p className="muted small">
             <code>
-              {doc.locale}/{doc.slug}.md
+              {doc.locale}/{doc.slug}.{drive ? (doc.slug === 'schedule' ? 'xlsx' : 'docx') : 'md'}
             </code>{' '}
+            {drive && <Tag tone="accent">Google Drive</Tag>}{' '}
             · v{doc.version} · {doc.chunks} фрагм. в индексе · обновлён {fmtDate(doc.updatedAt)}
           </p>
         </div>
@@ -186,19 +190,41 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
           >
             Скачать .md
           </button>
-          <button type="button" className="btn btn--quiet btn--small btn--danger" onClick={remove}>
-            Удалить
-          </button>
+          {drive ? (
+            doc.driveUrl && (
+              <a className="btn btn--secondary btn--small" href={doc.driveUrl} target="_blank" rel="noopener">
+                Открыть в Google Drive <IconArrowUpRight size={16} />
+              </a>
+            )
+          ) : (
+            <button type="button" className="btn btn--quiet btn--small btn--danger" onClick={remove}>
+              Удалить
+            </button>
+          )}
         </div>
       </header>
+
+      {drive && (
+        <Notice>
+          Источник этого документа — файл в Google Drive. Правьте его там: бот подхватит изменения при следующем вопросе,
+          а запись появится в разделе <a href={href('sync')}>«Синхронизация»</a>.
+          {append && (
+            <>
+              {' '}
+              Вопрос без ответа, который стоит добавить отдельным разделом: <strong>«{append}»</strong>.
+            </>
+          )}
+        </Notice>
+      )}
 
       {result && <Notice tone={result.indexError ? 'bad' : 'good'}>{saveMessage(result)}</Notice>}
       {error && <Notice tone="bad">{error}</Notice>}
 
       <div className="editor">
         <label className="field editor__field">
-          <span className="field__label">Markdown</span>
+          <span className="field__label">{drive ? 'Текст из Drive (только чтение)' : 'Markdown'}</span>
           <textarea
+            readOnly={drive}
             ref={textRef}
             className="input editor__text"
             spellCheck={false}
@@ -238,6 +264,7 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
         </section>
       </div>
 
+      {!drive && (
       <div className="savebar">
         <input
           className="input savebar__note"
@@ -254,6 +281,7 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
           {busy ? 'Сохраняю и индексирую…' : isDirty ? `Сохранить · пересчитать ${changedCount}` : 'Сохранено'}
         </button>
       </div>
+      )}
 
       <section className="card panel">
         <h3 className="panel__title">История версий</h3>
@@ -281,7 +309,7 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
                     <button type="button" className="btn btn--quiet btn--small" onClick={() => setViewing(v)}>
                       Открыть
                     </button>
-                    {v.version !== doc.version && (
+                    {v.version !== doc.version && !drive && (
                       <button
                         type="button"
                         className="btn btn--quiet btn--small"
@@ -304,7 +332,7 @@ export function DocEditor({ id, append, dirty, onSaved, onDeleted }: Props) {
           doc={doc}
           version={viewing}
           onClose={() => setViewing(null)}
-          onRollback={() => rollback(viewing.version)}
+          onRollback={drive ? null : () => rollback(viewing.version)}
         />
       )}
     </div>
@@ -320,7 +348,8 @@ function VersionView({
   doc: DocumentDetail
   version: DocumentVersion
   onClose: () => void
-  onRollback: () => void
+  /** null — откат недоступен (документ из Google Drive). */
+  onRollback: (() => void) | null
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [body, setBody] = useState<string | null>(null)
@@ -395,7 +424,7 @@ function VersionView({
               Скачать .md
             </button>
           )}
-          {!current && (
+          {!current && onRollback && (
             <button type="button" className="btn btn--primary" onClick={onRollback}>
               Откатить к v{version.version}
             </button>
