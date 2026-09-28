@@ -96,3 +96,42 @@ create table if not exists rate_limits (
   window_start  timestamptz not null,
   count         int not null
 );
+
+-- ============================================================
+-- Google Drive как источник документов (server/rag/sync.ts).
+-- source: 'local' — документ из seed/админки, 'drive' — из папки
+-- Drive; такие правятся только в Drive, админка их лишь показывает.
+-- drive_modified_at — modifiedTime файла как его отдал Drive (текст,
+-- сравнивается один в один): совпал — файл не скачиваем.
+-- ============================================================
+alter table documents add column if not exists source text not null default 'local';
+alter table documents add column if not exists drive_file_id text;
+alter table documents add column if not exists drive_modified_at text;
+alter table documents add column if not exists drive_url text;
+
+-- Одна строка: когда Drive проверяли последний раз. Условный update
+-- по ней — «замок» между serverless-инстансами: за интервал Drive
+-- проверяет только один запрос.
+create table if not exists sync_state (
+  id          int primary key check (id = 1),
+  checked_at  timestamptz not null
+);
+insert into sync_state (id, checked_at) values (1, 'epoch') on conflict do nothing;
+
+-- Журнал синхронизации: только реальные изменения и ошибки.
+create table if not exists sync_log (
+  id               serial primary key,
+  created_at       timestamptz not null default now(),
+  trigger          text not null,
+  locale           text,
+  slug             text,
+  file_name        text,
+  action           text not null check (action in ('linked', 'added', 'updated', 'removed', 'error')),
+  version          int,
+  lines_added      int,
+  lines_removed    int,
+  chunks_embedded  int,
+  chunks_total     int,
+  message          text
+);
+create index if not exists sync_log_created_idx on sync_log (created_at desc);

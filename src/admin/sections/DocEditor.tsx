@@ -6,7 +6,7 @@ import { chunkMarkdown } from '../../../shared/chunker'
 import type { Chunk } from '../../../shared/chunker'
 import { IconClose } from '../../graphics/icons'
 import { api, download, fmtDate } from '../api'
-import { lineDiff } from '../diff'
+import { lineDiff } from '../../../shared/diff'
 import { Notice, Seg, Tag, errorText } from '../ui'
 
 /* ============================================================

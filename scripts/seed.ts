@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url'
 import { getDb, migrate } from '../server/db/client.js'
 import { officeToMarkdown } from '../server/drive/convert.js'
 import type { OfficeKind } from '../server/drive/convert.js'
+import { driveEnabled } from '../server/drive/client.js'
 import { reindexAll, saveDocument } from '../server/rag/ingest.js'
+import { syncFromDrive } from '../server/rag/sync.js'
 import type { Locale } from '../shared/protocol.js'
 
 /* ============================================================
@@ -68,6 +70,13 @@ if (reindex) {
     `  переиндексация: документов ${reports.length}, кусков ${sum('total')}, ` +
       `векторов посчитано ${sum('embedded')}, взято готовых ${sum('reused')}`,
   )
+}
+
+// Drive подключён — он источник правды: подтянуть из него всё, что новее файлов репозитория.
+if (driveEnabled() && !noIndex) {
+  const res = await syncFromDrive('seed', true)
+  console.log(`  Google Drive: файлов ${res.files}, изменений ${res.changes.length}`)
+  for (const e of res.changes) console.log(`    ${e.action} ${e.locale ?? ''}/${e.slug ?? ''} ${e.message ?? ''}`)
 }
 
 console.log('Готово.')

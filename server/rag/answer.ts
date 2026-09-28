@@ -16,6 +16,7 @@ import { ChainError, generateText, streamWithFallback } from '../llm/chain.js'
 import { chain, providers } from '../llm/registry.js'
 import { condenseRequest, noRagRequest, parseKindTag, ragRequest } from './prompt.js'
 import { retrieve } from './retrieve.js'
+import { syncBeforeAnswer } from './sync.js'
 
 /* ============================================================
    ОТВЕТ НА ВОПРОС — весь конвейер RAG по шагам:
@@ -118,8 +119,12 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
     return
   }
 
+  /* ---------- 0. свериться с Google Drive (параллельно с condense) ---------- */
+  const synced = syncBeforeAnswer()
+
   /* ---------- 1. condense ---------- */
   const condensed = await condenseQuestion(req.question, req.history, ctx.signal)
+  await synced
   // В поиск идёт самостоятельный вопрос; модель же видит исходный
   // вопрос вместе с последними репликами диалога.
   const searchQuery = condensed ?? req.question

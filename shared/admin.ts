@@ -89,6 +89,9 @@ export interface DocumentRow {
   chunks: number
   /** Кусков с векторами другой модели эмбеддингов. */
   stale: number
+  /** 'drive' — документ из Google Drive: правится только там. */
+  source: 'local' | 'drive'
+  driveUrl: string | null
 }
 
 export interface DocumentVersion {
@@ -154,4 +157,44 @@ export interface SandboxResult {
   prompt: { system: string; user: string }
   /** Почему фрагменты не пойдут в промпт; null — пойдут. */
   wouldRefuse: RefusalReason | null
+}
+
+/* ---------- Синхронизация с Google Drive ---------- */
+
+/** Кто запустил проверку: вопрос в чате, кнопка в админке или npm run seed. */
+export type SyncTrigger = 'chat' | 'admin' | 'seed'
+export type SyncAction = 'linked' | 'added' | 'updated' | 'removed' | 'error'
+
+export interface SyncLogEntry {
+  id: number
+  createdAt: string
+  trigger: SyncTrigger
+  locale: Locale | null
+  slug: string | null
+  fileName: string | null
+  action: SyncAction
+  version: number | null
+  linesAdded: number | null
+  linesRemoved: number | null
+  chunksEmbedded: number | null
+  chunksTotal: number | null
+  message: string | null
+}
+
+export interface SyncStatus {
+  /** Заданы папка и ключ сервисного аккаунта. */
+  enabled: boolean
+  folderUrl: string | null
+  /** E-mail сервисного аккаунта: на него «расшаривают» папку. */
+  serviceEmail: string | null
+  checkedAt: string | null
+  intervalSec: number
+  log: SyncLogEntry[]
+}
+
+export interface SyncRunResult {
+  /** false — проверку уже делает другой запрос (или Drive выключен). */
+  checked: boolean
+  files: number
+  changes: SyncLogEntry[]
 }

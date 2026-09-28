@@ -26,11 +26,17 @@ export function serviceAccount(): ServiceAccount | null {
   if (account !== undefined) return account
   const raw = env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!raw) return (account = null)
-  const text = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8')
-  const parsed = JSON.parse(text) as ServiceAccount
-  // Из панели Vercel перевод строки в ключе иногда приходит как «\n».
-  parsed.private_key = parsed.private_key.replace(/\\n/g, '\n')
-  return (account = parsed)
+  try {
+    const text = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8')
+    const parsed = JSON.parse(text) as ServiceAccount
+    if (!parsed.client_email || !parsed.private_key) throw new Error('нет client_email или private_key')
+    // Из панели Vercel перевод строки в ключе иногда приходит как «\n».
+    parsed.private_key = parsed.private_key.replace(/\\n/g, '\n')
+    return (account = parsed)
+  } catch (err) {
+    console.error('[drive] GOOGLE_SERVICE_ACCOUNT_JSON не читается:', (err as Error).message)
+    return (account = null)
+  }
 }
 
 const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64url')

@@ -11,6 +11,8 @@ import type {
   SaveResult,
   SessionInfo,
   Stats,
+  SyncRunResult,
+  SyncStatus,
   TraceDetail,
   TraceFilter,
   TraceList,
@@ -23,9 +25,11 @@ import { getDb } from '../db/client.js'
 import { env } from '../env.js'
 import { ChainError, chainStatus, generateText, resetCooldowns } from '../llm/chain.js'
 import { embedModelLabel, providers } from '../llm/registry.js'
+import { driveEnabled } from '../drive/client.js'
 import { reindexAll, saveDocument } from '../rag/ingest.js'
 import { ragRequest } from '../rag/prompt.js'
 import { SHOW_LIMIT, retrieve } from '../rag/retrieve.js'
+import { syncFromDrive, syncStatus } from '../rag/sync.js'
 import { clientIp, hashIp, overLimit } from '../rateLimit.js'
 import { adminEnabled, checkPassword, endSession, isAuthenticated, requireAdmin, startSession } from './auth.js'
 import { zip } from './zip.js'
@@ -320,7 +324,7 @@ admin.get('/stats', async (c) => {
 /* ---------- База знаний ---------- */
 
 const DOC_COLUMNS = `d.id, d.locale, d.slug, d.title, d.version, d.updated_at as "updatedAt", d.is_price as "isPrice",
-  count(c.id)::int as chunks, count(c.id) filter (where c.embed_model is distinct from $1)::int as stale`
+  d.source, d.drive_url as "driveUrl", count(c.id)::int as chunks, count(c.id) filter (where c.embed_model is distinct from $1)::int as stale`
 
 admin.get('/documents', async (c) => {
   const db = await getDb()
@@ -378,11 +382,20 @@ async function saveAndReport(input: Parameters<typeof saveDocument>[0]): Promise
   }
 }
 
+/** Документы из Google Drive правятся только в Drive: иначе следующая синхронизация затрёт правку. */
+async function fromDrive(id: number): Promise<boolean> {
+  const db = await getDb()
+  const [row] = await db.query<{ source: string }>('select source from documents where id = $1', [id])
+  return row?.source === 'drive'
+}
+const DRIVE_ONLY = { error: 'drive', message: 'Документ из Google Drive: правьте его в Drive' } as const
+
 const saveSchema = z.object({ bodyMd: z.string().min(1).max(200_000), note: z.string().trim().max(200).optional() })
 
 admin.put('/documents/:id', async (c) => {
   const data = await body(c.req.raw, saveSchema)
   if (!data) return c.json({ error: 'bad-request' }, 400)
+  if (await fromDrive(Number(c.req.param('id')))) return c.json(DRIVE_ONLY, 409)
   const db = await getDb()
   const [doc] = await db.query<{ locale: Locale; slug: string }>('select locale, slug from documents where id = $1', [
     Number(c.req.param('id')),
@@ -401,6 +414,8 @@ admin.post('/documents', async (c) => {
     }),
   )
   if (!data) return c.json({ error: 'bad-request' }, 400)
+  // С подключённым Drive новые документы появляются из папки, а не отсюда.
+  if (driveEnabled()) return c.json({ error: 'drive', message: 'Добавьте файл в папку Google Drive' }, 409)
   const db = await getDb()
   const [exists] = await db.query('select 1 from documents where locale = $1 and slug = $2', [data.locale, data.slug])
   if (exists) return c.json({ error: 'exists' }, 409)
@@ -410,6 +425,7 @@ admin.post('/documents', async (c) => {
 admin.post('/documents/:id/rollback', async (c) => {
   const data = await body(c.req.raw, z.object({ version: z.number().int().positive() }))
   if (!data) return c.json({ error: 'bad-request' }, 400)
+  if (await fromDrive(Number(c.req.param('id')))) return c.json(DRIVE_ONLY, 409)
   const db = await getDb()
   const [row] = await db.query<{ locale: Locale; slug: string; body_md: string }>(
     `select d.locale, d.slug, v.body_md from documents d
@@ -425,6 +441,7 @@ admin.post('/documents/:id/rollback', async (c) => {
 })
 
 admin.delete('/documents/:id', async (c) => {
+  if (await fromDrive(Number(c.req.param('id')))) return c.json(DRIVE_ONLY, 409)
   const db = await getDb()
   await db.query('delete from documents where id = $1', [Number(c.req.param('id'))])
   return c.json({ ok: true })
@@ -445,6 +462,13 @@ admin.get('/export', async () => {
     },
   })
 })
+
+/* ---------- Синхронизация с Google Drive ---------- */
+
+admin.get('/sync', async (c) => c.json<SyncStatus>(await syncStatus()))
+
+/** «Проверить сейчас»: в обход интервала. */
+admin.post('/sync', async (c) => c.json<SyncRunResult>(await syncFromDrive('admin', true)))
 
 /* ---------- Модели и индекс ---------- */
 
