@@ -1,17 +1,21 @@
 import { readdir, readFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDb, migrate } from '../server/db/client.js'
+import { officeToMarkdown } from '../server/drive/convert.js'
+import type { OfficeKind } from '../server/drive/convert.js'
 import { reindexAll, saveDocument } from '../server/rag/ingest.js'
 import type { Locale } from '../shared/protocol.js'
 
 /* ============================================================
-   npm run seed — залить content/rag/{ru,uz}/*.md в базу и
-   проиндексировать.
+   npm run seed — залить content/drive/{ru,uz}/*.docx|xlsx в базу и
+   проиндексировать. Это те же файлы, что лежат в папке Google Drive
+   (npm run export:office), и читаются они тем же конвертером —
+   seed нужен, когда Drive не подключён или база пустая.
 
    По умолчанию документы, которые уже есть в базе, НЕ трогаются:
-   их могли поправить в админке, а md-файлы — только начальные
-   данные. Флаг --force перезаписывает их содержимым файлов
+   их могла обновить синхронизация с Drive, а файлы в репозитории —
+   только начальные данные. Флаг --force перезаписывает их содержимым файлов
    (как новая версия, старые остаются в истории).
 
    --reindex — пересчитать индекс всех документов базы, например
@@ -27,24 +31,25 @@ import type { Locale } from '../shared/protocol.js'
 const force = process.argv.includes('--force')
 const reindex = process.argv.includes('--reindex')
 const noIndex = process.argv.includes('--no-index')
-const root = new URL('../content/rag/', import.meta.url)
+const root = new URL('../content/drive/', import.meta.url)
 
 await migrate()
 const db = await getDb()
 
 for (const locale of ['ru', 'uz'] as Locale[]) {
   const dir = fileURLToPath(new URL(`${locale}/`, root))
-  const files = (await readdir(dir)).filter((f) => f.endsWith('.md')).sort()
+  const files = (await readdir(dir)).filter((f) => /\.(docx|xlsx)$/.test(f)).sort()
 
   for (const file of files) {
-    const slug = basename(file, '.md')
+    const kind = extname(file).slice(1) as OfficeKind
+    const slug = basename(file, extname(file))
     const [exists] = await db.query('select 1 from documents where locale = $1 and slug = $2', [locale, slug])
     if (exists && !force) {
       console.log(`  ${locale}/${slug}: уже в базе, пропускаю (--force, чтобы перезаписать)`)
       continue
     }
-    const bodyMd = (await readFile(join(dir, file), 'utf8')).replace(/\r\n/g, '\n')
-    const res = await saveDocument({ locale, slug, bodyMd, note: 'seed из content/rag', index: !noIndex })
+    const bodyMd = await officeToMarkdown(kind, await readFile(join(dir, file)))
+    const res = await saveDocument({ locale, slug, bodyMd, note: 'seed из content/drive', index: !noIndex })
     const idx = res.index
     console.log(
       res.changed && !idx
