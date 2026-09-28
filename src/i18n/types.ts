@@ -111,17 +111,44 @@ export interface Dict {
     mapAlt: string
     form: {
       title: string
+      lede: string
+      service: string
+      servicePlaceholder: string
+      doctor: string
+      day: string
+      time: string
+      today: string
+      tomorrow: string
+      /** Короткие названия месяцев: янв … дек. */
+      months: string[]
+      loading: string
+      noSlots: string
       name: string
       namePlaceholder: string
       phone: string
       phonePlaceholder: string
-      service: string
-      servicePlaceholder: string
+      comment: string
+      commentPlaceholder: string
       submit: string
+      sending: string
       note: string
       errorName: string
       errorPhone: string
-      success: string
+      errorSlot: string
+      errorTaken: string
+      errorTooMany: string
+      errorRateLimit: string
+      errorFailed: string
+      errorLoad: string
+      retry: string
+      successTitle: string
+      /** {doctor}, {date}, {time} */
+      successText: string
+      successCode: string
+      successNote: string
+      another: string
+      offline: string
+      offlineCta: string
     }
   }
 
