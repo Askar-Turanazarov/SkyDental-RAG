@@ -10,6 +10,8 @@ import type {
   RefusalReason,
   RetrievalInfo,
 } from '../../shared/protocol.js'
+import { bookMarkFilter, bookingOffers, scheduleContext, stripBookMarks } from '../booking/assistant.js'
+import type { ScheduleContext } from '../booking/assistant.js'
 import { getDb } from '../db/client.js'
 import { env } from '../env.js'
 import { ChainError, generateText, streamWithFallback } from '../llm/chain.js'
@@ -22,7 +24,8 @@ import { syncBeforeAnswer } from './sync.js'
    ОТВЕТ НА ВОПРОС — весь конвейер RAG по шагам:
 
    1. condense  — follow-up вопрос → самостоятельный (если есть история);
-   2. retrieve  — гибридный поиск кусков;
+   2. retrieve  — гибридный поиск кусков; если вопрос о записи —
+                  ещё и свободные окна врачей (блок <schedule>);
    3. threshold — в промпт идут куски, только если лучший не слабее
                   порога. Не прошёл — модель отвечает без фрагментов:
                   поздороваться, вернуть к теме, дать общую справку
@@ -31,7 +34,8 @@ import { syncBeforeAnswer } from './sync.js'
    4. generate  — модель отвечает, токены идут потоком. Первой строкой
                   она ставит метку вида ответа [[kb]] и т. п. — сервер
                   её вырезает;
-   5. cite      — из ответа достаются сноски [n] → источники;
+   5. cite      — из ответа достаются сноски [n] → источники,
+                  метки [[book:…]] → кнопки записи;
    6. trace     — всё это пишется в chat_traces для админки.
 
    Без настоящей модели (офлайн-цепочка local) при непройденном
@@ -78,7 +82,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   let retrieveMs = 0
 
   const finish = async (
-    partial: Pick<AnswerMeta, 'found' | 'kind' | 'refusal' | 'sources' | 'provider' | 'model' | 'attempts' | 'usage'>,
+    partial: Pick<AnswerMeta, 'found' | 'kind' | 'refusal' | 'sources' | 'booking' | 'provider' | 'model' | 'attempts' | 'usage'>,
     answer: string,
     generateMs: number,
   ) => {
@@ -129,9 +133,16 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   // вопрос вместе с последними репликами диалога.
   const searchQuery = condensed ?? req.question
 
+  // Свободные окна — параллельно с поиском. Сбой записи не должен ломать ответ.
+  const scheduled: Promise<ScheduleContext | null> = scheduleContext([req.question, condensed ?? ''], req.locale).catch(
+    (err) => (console.error('[schedule]', err), null),
+  )
+  let schedule: ScheduleContext | null = null
+
   /* ---------- 2. retrieve + 3. threshold ---------- */
   try {
     const r = await retrieve(searchQuery, req.locale)
+    schedule = await scheduled
     retrieveMs = r.ms
     const passed = r.bestScore !== null && r.bestScore >= env.RAG_MIN_SCORE
     retrieval = {
@@ -143,6 +154,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
       threshold: env.RAG_MIN_SCORE,
       method: 'hybrid',
       ms: r.ms,
+      schedule: schedule?.info ?? null,
     }
   } catch (err) {
     console.error('[retrieve]', err)
@@ -169,7 +181,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
 
   const inPrompt = retrieval.chunks.filter((c) => c.n !== null).length
   // Офлайн-модель умеет только пересказывать фрагменты: без них — честный отказ.
-  if (!inPrompt && !realChain.length) return refuse(refusalReason(retrieval))
+  if (!inPrompt && !schedule && !realChain.length) return refuse(refusalReason(retrieval))
 
   /* ---------- 4. generate ---------- */
   const g0 = Date.now()
@@ -179,12 +191,14 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   let released = false
   let kindTag: AnswerKind | null = null
   let shown = ''
+  // Метки [[book:…]] клиенту не уходят: из них получатся кнопки записи.
+  const marks = bookMarkFilter((t) => void emit({ type: 'token', text: t }))
   const show = (t: string) => {
     // Перевод строки после метки клиенту не нужен.
     const out = shown ? t : t.trimStart()
     if (!out) return
     shown += out
-    void emit({ type: 'token', text: out })
+    marks.push(out)
   }
   const onText = (t: string) => {
     if (released) return show(t)
@@ -209,6 +223,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
           chunks: retrieval.chunks,
           bestScore: retrieval.bestScore,
           threshold: env.RAG_MIN_SCORE,
+          schedule: schedule?.info.text,
         }),
         signal: ctx.signal,
       },
@@ -221,11 +236,12 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   const generateMs = Date.now() - g0
 
   const parsed = parseKindTag(res.text)
-  const text = parsed.rest.trim()
+  const text = stripBookMarks(parsed.rest.trim())
   if (!text || text.startsWith(NO_ANSWER)) {
     return refuse(refusalReason(retrieval), res.attempts, res, generateMs)
   }
   if (!released) show(text)
+  marks.flush()
 
   /* ---------- 5. cite ---------- */
   const cited = new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])))
@@ -236,6 +252,9 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
   // Метка модели главнее; без метки (офлайн-модель) судим по сноскам.
   let kind: AnswerKind = kindTag ?? parsed.kind ?? (sources.length ? 'kb' : 'general')
   if (kind === 'general' && sources.length) kind = 'kb'
+  const booking = schedule ? bookingOffers(parsed.rest, schedule, req.locale) : []
+  // Предложенные окна взяты из системы записи — это тоже данные клиники.
+  if (booking.length && (kind === 'general' || kind === 'missing')) kind = 'kb'
 
   await finish(
     {
@@ -246,6 +265,7 @@ export async function answerQuestion(req: ChatRequest, emit: Emit, ctx: Context)
           ? { reason: refusalReason(retrieval), bestScore: retrieval.bestScore, threshold: env.RAG_MIN_SCORE }
           : null,
       sources,
+      booking,
       provider: res.provider,
       model: res.model,
       attempts: res.attempts,

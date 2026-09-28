@@ -301,6 +301,12 @@ export const uz: Dict = {
       ms: 'ms',
       demoNote:
         'Backendsiz embedding modeli yoʻq, shuning uchun demo sinonimlarni va boshqa tilni tushunmaydi. Haqiqiy RAGni koʻrish uchun /api/chat ni ulang.',
+      schedule: 'Yozilish tizimidagi boʻsh vaqtlar: shifokorlar {doctors}, vaqtlar {slots} — promptda',
+    },
+    book: {
+      title: 'Qabulga yozilish',
+      pick: 'Vaqtni tanlash',
+      label: 'Yozilish: {doctor}, {when}',
     },
   },
 }

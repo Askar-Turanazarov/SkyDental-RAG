@@ -59,6 +59,25 @@ export interface RetrievalInfo {
   /** 'hybrid' — вектор + ключевые слова на сервере; 'keyword' — демо в браузере. */
   method: 'hybrid' | 'keyword'
   ms: number
+  /** Свободные окна из системы записи, которые ушли в промпт (вопрос о записи). */
+  schedule?: ScheduleInfo | null
+}
+
+export interface ScheduleInfo {
+  /** Блок <schedule> как его видит модель: врачи и свободное время, без данных пациентов. */
+  text: string
+  doctors: number
+  slots: number
+}
+
+/** Окно, предложенное ассистентом: кнопка «Записаться» под ответом открывает форму. */
+export interface BookingOffer {
+  doctorId: string
+  doctor: string
+  /** null — окно не выбрано: форма откроется на враче, время пациент выберет сам. */
+  startsAt: string | null
+  date: string | null
+  time: string | null
 }
 
 export interface Attempt {
@@ -101,6 +120,8 @@ export interface AnswerMeta {
   refusal: { reason: RefusalReason; bestScore: number | null; threshold: number } | null
   /** Источники, на которые модель действительно сослалась. */
   sources: AnswerSource[]
+  /** Окна для записи, которые ассистент предложил в ответе. */
+  booking?: BookingOffer[]
   provider: string | null
   model: string | null
   attempts: Attempt[]

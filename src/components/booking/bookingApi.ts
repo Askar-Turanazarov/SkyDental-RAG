@@ -1,4 +1,7 @@
+import { WEEKDAY_SHORT, addDays, weekdayOf } from '../../../shared/booking'
 import type { BookingRequest, BookingResponse, Doctor, Slot, SlotsResponse } from '../../../shared/booking'
+import type { Locale } from '../../../shared/protocol'
+import type { Dict } from '../../i18n/types'
 
 /* ============================================================
    Клиент API записи (server/booking/routes.ts).
@@ -31,6 +34,13 @@ export async function book(req: BookingRequest): Promise<BookingResponse> {
   })
   if (res.status >= 500) throw new Error(`booking API ${res.status}`)
   return (await res.json()) as BookingResponse
+}
+
+/** «Сегодня / 29 сен», «Ср / 1 окт» — для кнопок дней в форме и в чате. */
+export function dayLabel(date: string, f: Dict['contacts']['form'], locale: Locale, today: string) {
+  const [, m, d] = date.split('-').map(Number)
+  const top = date === today ? f.today : date === addDays(today, 1) ? f.tomorrow : WEEKDAY_SHORT[locale][weekdayOf(date) - 1]
+  return { top, bottom: `${d} ${f.months[m - 1]}` }
 }
 
 /* ---------- «Записаться на это время» из чата ---------- */

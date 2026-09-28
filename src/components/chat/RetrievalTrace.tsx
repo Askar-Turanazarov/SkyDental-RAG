@@ -93,6 +93,13 @@ export function RetrievalTrace({ retrieval, meta, detailed, c }: Props) {
           </p>
         )}
 
+        {retrieval.schedule && (
+          <div className="trace__schedule">
+            <p>{fill(tr.schedule, { doctors: retrieval.schedule.doctors, slots: retrieval.schedule.slots })}</p>
+            {detailed && <pre className="trace__text">{retrieval.schedule.text}</pre>}
+          </div>
+        )}
+
         {meta && <ModelInfo meta={meta} c={c} />}
 
         {!hybrid && <p className="trace__note">{tr.demoNote}</p>}

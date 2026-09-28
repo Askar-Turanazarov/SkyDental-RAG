@@ -843,3 +843,48 @@
   font-size: var(--text-caption);
   color: var(--content-secondary);
 }
+
+/* Окна для записи, предложенные ассистентом: кнопка открывает форму. */
+.msg__book {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  font-size: var(--text-caption);
+  color: var(--content-secondary);
+}
+.msg__book-list { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.msg__book-btn {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-height: var(--tap);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--accent-sunken);
+  color: var(--content);
+  text-align: left;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-spring);
+}
+.msg__book-btn:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.msg__book-btn:active { transform: scale(0.97); }
+.msg__book-when { font-weight: 600; font-variant-numeric: tabular-nums; }
+.msg__book-doctor { font-size: var(--text-caption); color: var(--content-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .msg__book-btn:active { transform: none; }
+}
+
+/* Свободные окна, ушедшие в промпт, — в трассе. */
+.trace__schedule {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.trace__schedule .trace__text {
+  display: block;
+  -webkit-line-clamp: unset;
+  white-space: pre-wrap;
+  font: inherit;
+}

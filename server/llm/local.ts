@@ -51,6 +51,11 @@ export function localEmbedding(text: string): number[] {
  * как требует промпт от настоящей модели.
  */
 function extractiveAnswer(prompt: string): string {
+  // Вопрос о записи: пересказываем свободные окна первого врача из блока <schedule>.
+  const schedule = /<schedule>\n([\s\S]*?)\n<\/schedule>/.exec(prompt)?.[1]
+  const firstDoctor = schedule?.split('\n\n')[1]?.trim()
+  if (firstDoctor) return firstDoctor
+
   const chunks = [...prompt.matchAll(/\[(\d+)\] \([^\n]*\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|\n<\/context>|$)/g)].map(
     (m) => ({ n: Number(m[1]), text: m[2].trim() }),
   )

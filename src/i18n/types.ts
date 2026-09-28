@@ -249,6 +249,16 @@ export interface Dict {
       /** Единица «миллисекунды». */
       ms: string
       demoNote: string
+      /** Свободные окна в промпте. {doctors}, {slots} — числа. */
+      schedule: string
+    }
+    /** Кнопки записи на окна, которые предложил ассистент. */
+    book: {
+      title: string
+      /** Окно не выбрано — форма откроется на враче. */
+      pick: string
+      /** aria-label кнопки. {doctor}, {when} */
+      label: string
     }
   }
 }

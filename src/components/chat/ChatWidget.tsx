@@ -3,7 +3,10 @@ import type { FormEvent, KeyboardEvent } from 'react'
 import { useLocale, useT } from '../../i18n/LocaleContext'
 import { fill } from '../../i18n/fill'
 import type { Dict } from '../../i18n/types'
+import { clinicDate } from '../../../shared/booking'
+import type { BookingOffer } from '../../../shared/protocol'
 import { PhoneLink } from '../PhoneLink'
+import { dayLabel, openBooking } from '../booking/bookingApi'
 import {
   IconChat,
   IconClose,
@@ -34,6 +37,8 @@ import './chat.css'
  *  - статус ожидания говорит, что происходит, а не «Обработка…»;
  *  - нет ответа в материалах — честный отказ, а не выдумка;
  *  - всегда есть не-ИИ путь: позвонить живому человеку;
+ *  - предложенное окно записи — кнопка: чат закрывается, открывается
+ *    форма записи с этим врачом и временем (записывает форма, не ИИ);
  *  - отзыв на ответ добровольный и не перебивает разговор.
  *
  * Наглядность RAG (учебная цель проекта):
@@ -104,6 +109,11 @@ export function ChatWidget() {
       e.preventDefault()
       first.focus()
     }
+  }
+
+  function bookFromChat(offer: BookingOffer) {
+    setOpen(false)
+    openBooking({ doctorId: offer.doctorId, startsAt: offer.startsAt ?? undefined })
   }
 
   function ask(text: string) {
@@ -223,7 +233,7 @@ export function ChatWidget() {
                   <p className="msg__bubble">{m.text}</p>
                 </div>
               ) : (
-                <AssistantMessage key={m.id} m={m} status={status} student={student} c={c} chat={chat} />
+                <AssistantMessage key={m.id} m={m} status={status} student={student} c={c} chat={chat} onBook={bookFromChat} />
               ),
             )}
 
@@ -286,9 +296,10 @@ interface AssistantProps {
   student: boolean
   c: Dict['chat']
   chat: ReturnType<typeof useChat>
+  onBook: (offer: BookingOffer) => void
 }
 
-function AssistantMessage({ m, status, student, c, chat }: AssistantProps) {
+function AssistantMessage({ m, status, student, c, chat, onBook }: AssistantProps) {
   const [cite, setCite] = useState<number | null>(null)
   const chunks = m.retrieval?.chunks ?? []
   const activeChunk = cite === null ? undefined : chunks.find((ch) => ch.n === cite)
@@ -366,6 +377,7 @@ function AssistantMessage({ m, status, student, c, chat }: AssistantProps) {
               ))}
             </div>
           )}
+          {done && !!m.meta!.booking?.length && <BookingOffers offers={m.meta!.booking} c={c} onBook={onBook} />}
         </div>
       )}
 
@@ -397,6 +409,36 @@ function AssistantMessage({ m, status, student, c, chat }: AssistantProps) {
           {!m.compare.streaming && !m.compare.failed && <p className="msg__compare-note">{c.compareNote}</p>}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Окна, которые предложил ассистент: кнопка открывает форму записи с этим временем. */
+function BookingOffers({ offers, c, onBook }: { offers: BookingOffer[]; c: Dict['chat']; onBook: (o: BookingOffer) => void }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const today = clinicDate(new Date())
+  return (
+    <div className="msg__book">
+      <span className="msg__sources-title">{c.book.title}</span>
+      <div className="msg__book-list">
+        {offers.map((o) => {
+          const day = o.date ? dayLabel(o.date, t.contacts.form, locale, today) : null
+          const when = day ? `${day.top}, ${day.bottom} · ${o.time}` : c.book.pick
+          return (
+            <button
+              key={`${o.doctorId}|${o.startsAt}`}
+              type="button"
+              className="msg__book-btn"
+              aria-label={fill(c.book.label, { doctor: o.doctor, when })}
+              onClick={() => onBook(o)}
+            >
+              <span className="msg__book-when">{when}</span>
+              <span className="msg__book-doctor">{o.doctor}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

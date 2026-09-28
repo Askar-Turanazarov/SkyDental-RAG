@@ -1,21 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import {
-  WEEKDAY_SHORT,
-  addDays,
-  clinicDate,
-  isValidName,
-  normalizePhone,
-  weekdayOf,
-} from '../../../shared/booking'
+import { clinicDate, isValidName, normalizePhone } from '../../../shared/booking'
 import type { Appointment, BookingError, Doctor, ServiceId, Slot } from '../../../shared/booking'
-import type { Locale } from '../../../shared/protocol'
 import { TELEGRAM_URL } from '../../config'
 import { IconCheck, IconTelegram } from '../../graphics/icons'
 import { useLocale, useT } from '../../i18n/LocaleContext'
 import { fill } from '../../i18n/fill'
-import type { Dict } from '../../i18n/types'
-import { book, bookingApi, fetchDoctors, fetchSlots, onOpenBooking } from './bookingApi'
+import { book, bookingApi, dayLabel, fetchDoctors, fetchSlots, onOpenBooking } from './bookingApi'
 import type { BookPrefill } from './bookingApi'
 
 /* ============================================================
@@ -27,15 +18,7 @@ import type { BookPrefill } from './bookingApi'
    об этом и заново загружает окна.
    ============================================================ */
 
-type Form = Dict['contacts']['form']
 type Errors = Partial<Record<'slot' | 'name' | 'phone' | 'form', string>>
-
-/** «Сегодня / 29 сен», «Ср / 1 окт». */
-function dayLabel(date: string, f: Form, locale: Locale, today: string) {
-  const [, m, d] = date.split('-').map(Number)
-  const top = date === today ? f.today : date === addDays(today, 1) ? f.tomorrow : WEEKDAY_SHORT[locale][weekdayOf(date) - 1]
-  return { top, bottom: `${d} ${f.months[m - 1]}` }
-}
 
 export function BookingForm() {
   const t = useT()
@@ -90,7 +73,11 @@ export function BookingForm() {
 
   useEffect(() => {
     const p = prefill.current
-    const doc = p && doctors?.find((d) => d.id === p.doctorId)
+    if (!p) return
+    // Врачи не загрузились — пациент пришёл из чата, пробуем ещё раз.
+    // loadError не в зависимостях: иначе при лежащем сервере повтор шёл бы по кругу.
+    if (!doctors) return void (loadError && setLoadTick((n) => n + 1))
+    const doc = doctors.find((d) => d.id === p.doctorId)
     if (!doc) return
     setDone(null)
     setErrors({})
