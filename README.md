@@ -14,7 +14,8 @@ whether it had to fall back to another model.
 | Backend | Node and TypeScript on [Hono](https://hono.dev), deployed as one Vercel function (`/api/*`) |
 | Database | Postgres with pgvector: [Neon](https://neon.tech) in production, embedded [PGlite](https://pglite.dev) locally (no Docker or cloud needed) |
 | LLM | A provider layer with an automatic fallback chain. Gemini by default, **light models only** (Flash-Lite and Flash with minimal reasoning). OpenAI, OpenRouter, Groq, DeepSeek, Anthropic and Ollama each need one env variable |
-| Admin panel | Feedback and traces, knowledge gaps, stats, a knowledge-base editor with versions and export, model status, a retrieval sandbox |
+| Admin panel | Feedback and traces, knowledge gaps, stats, a knowledge-base editor with versions and export, model status, a retrieval sandbox, bookings |
+| Online booking | A form with free slots, double-booking protection in the database, a copy in Google Sheets, and slot suggestions from the assistant |
 | Eval | 35 golden questions; hit@k, MRR and refusal accuracy; threshold tuning; an optional LLM judge |
 
 ## Contents
@@ -29,6 +30,7 @@ whether it had to fall back to another model.
 - [Deploying to Vercel and Neon](#deploying-to-vercel-and-neon)
 - [Project structure](#project-structure)
 - [Knowledge base](#knowledge-base)
+- [Online booking](#online-booking)
 - [Clinic data](#clinic-data)
 - [Design and motion](#design-and-motion)
 
@@ -197,6 +199,7 @@ Everything is described in [`.env.example`](.env.example). The main variables:
 | `GOOGLE_DRIVE_FOLDER_ID` | empty | Knowledge base folder in Google Drive. Empty disables sync |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | empty | Google service account JSON key, raw or base64 |
 | `DRIVE_SYNC_INTERVAL_SEC` | `20` | The server checks Drive for changed files at most once per this many seconds |
+| `GOOGLE_BOOKINGS_SHEET_ID` | empty | Google Sheet for a copy of the bookings: its id or full link. The service account needs **Editor** access |
 
 ## LLM providers and fallback
 
@@ -245,6 +248,7 @@ session is an httpOnly cookie signed with HMAC and valid for 7 days.
 | Sync | Whether the Drive folder is connected, when it was last checked, a "Check now" button, and the change log: which file, what happened, lines added and removed, chunks re-embedded |
 | Models | The chain, each model's state and pause, Ping, embedding state and "Reindex all" |
 | Sandbox | Ask a question and see the retrieval and the finished prompt without generating an answer. Handy in class |
+| Bookings | Upcoming, past and cancelled bookings with search, cancelling, and the Google Sheet status with a "Send to sheet" button |
 
 ## Eval
 
@@ -308,10 +312,12 @@ server/
 ├── rag/                ingest, retrieve, prompt, answer: the RAG pipeline
 ├── admin/              admin routes, auth, zip export
 ├── drive/              Google Drive: service account sign-in, file listing, Word/Excel → markdown
+├── booking/            online booking: doctors, free slots, bookings, Google Sheet copy, slots for the assistant
 └── rateLimit.ts
 shared/                 code shared by the frontend and the server
 ├── chunker.ts          markdown → chunks (demo bot, server and admin preview)
 ├── protocol.ts         request, SSE event and trace types
+├── booking.ts          services, doctors, slots, Tashkent time, phone check
 └── sse.ts, text.ts     SSE parsing; word stems for keyword search
 scripts/                migrate, seed, export-office, eval
 eval/golden.json        eval questions
@@ -335,6 +341,7 @@ The documents the bot answers from live in Google Drive. The FAQ, price list, se
 
 ```
 <Drive folder>/
+├── doctors.xlsx     doctors and their hours for online booking
 ├── ru/  prices.docx  faq.docx  services.docx  about.docx  schedule.xlsx
 └── uz/  …the same
 ```
@@ -392,6 +399,34 @@ the current database back to Word and Excel, for example to fill the Drive folde
 The phone, house number and floor in the schedule are the same `__` placeholders as on the site, so
 the bot never gives a number that isn't on the page.
 
+## Online booking
+
+A patient picks a service, a doctor, a day and a free hour in the form in the Contacts section, then
+leaves a name and a phone number. A first visit lasts one hour. Booking is open 14 days ahead, and
+the earliest slot starts at least an hour from now (Tashkent time, UTC+5).
+
+| Part | How it works |
+| --- | --- |
+| Doctors and hours | The `doctors.xlsx` table in the root of the Drive folder: code, name and specialty in both languages, service, bio and hours for each weekday (`09:00–14:00`; several shifts separated by commas; empty or `выходной` for a day off). It syncs like the other documents, and the bot also learns about the doctors from it. A doctor removed from the table stops taking bookings, but their existing bookings stay |
+| No double booking | The database guarantees it with a unique index on doctor and time for active bookings. If two patients press the button at the same moment, one gets the booking and the other sees "this time was just taken", and the form reloads the free slots |
+| Abuse limits | 5 bookings per hour from one IP, at most 3 upcoming bookings per phone number, and a hidden honeypot field |
+| Google Sheet | Every booking and cancellation is copied to the «Записи» tab of a Google Sheet for the administrator. The database stays the source of truth. If Google does not respond, the row is sent with the next booking or with the button in the admin panel. Rows are found by booking number and updated in place, so retries never create duplicates |
+| The assistant | When a question is about booking or free time, the server adds the free slots of the relevant doctors to the prompt: only doctors and times, never patient data. The assistant suggests 2–3 slots, and buttons appear under the answer. One click closes the chat and opens the form with the doctor and the time already chosen. The assistant never books by itself and never asks for a name or phone number in the chat. A slot the model makes up never becomes a button, because the server checks every one against the real free slots |
+| Admin panel | The Bookings section: upcoming, past and cancelled bookings, search by number, name or phone, cancelling (the slot becomes free again) and the Google Sheet status |
+
+**Connecting the Google Sheet**
+
+1. In the same Google Cloud project: **APIs & Services → Library → Google Sheets API → Enable**.
+2. Create an empty Google Sheet anywhere (for example, next to the knowledge base) and share it with
+   the service account e-mail as **Editor**. The «Записи» tab and its header are created
+   automatically.
+3. Put the link or the id of the sheet into `GOOGLE_BOOKINGS_SHEET_ID` (in `.env` and in Vercel),
+   run `npm run db:migrate` and redeploy.
+4. Admin panel → Bookings shows whether the sheet is connected and how many rows are waiting.
+
+Without the sheet, booking still works: bookings are stored in the database and shown in the admin
+panel. Without a backend (the demo mode) the form shows a link to the clinic's Telegram instead.
+
 ## Clinic data
 
 Texts, prices, the phone number and the address live in `src/i18n/ru.ts` and `src/i18n/uz.ts`.
@@ -420,9 +455,8 @@ While `phoneHref` is empty, `components/PhoneLink.tsx` shows the phone as **text
 because `tel:` would lead nowhere. Once the digits are there, all four places turn into links by
 themselves.
 
-**Booking form.** There is no booking backend yet. The form validates the name and the phone
-(`+998` and 9 digits), copies the request to the clipboard and opens the clinic's Telegram. When an
-endpoint appears, replace the body of `onSubmit` in `components/Contacts.tsx` with a `fetch()`.
+**Booking form.** How booking works and how to connect the Google Sheet is described in
+[Online booking](#online-booking).
 
 ## Design and motion
 

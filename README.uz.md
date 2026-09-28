@@ -14,7 +14,8 @@ promptga tushdi, qaysi model javob berdi va boshqa modelga oʻtishga toʻgʻri k
 | Backend | [Hono](https://hono.dev) asosida Node va TypeScript, bitta Vercel funksiyasi (`/api/*`) |
 | Maʼlumotlar bazasi | pgvector bilan Postgres: prodakshnda [Neon](https://neon.tech), lokal ishda ichki [PGlite](https://pglite.dev) (Docker va bulutsiz) |
 | LLM | Avtomatik zaxira modelga oʻtadigan provayderlar qatlami. Standart — Gemini, **faqat yengil modellar** (minimal reasoning bilan Flash-Lite va Flash). OpenAI, OpenRouter, Groq, DeepSeek, Anthropic va Ollama bitta muhit oʻzgaruvchisi bilan ulanadi |
-| Admin panel | Baholar va izlar (trace), bazadagi boʻshliqlar, statistika, versiyalar va eksportli baza muharriri, modellar holati, qidiruv qumdoni |
+| Admin panel | Baholar va izlar (trace), bazadagi boʻshliqlar, statistika, versiyalar va eksportli baza muharriri, modellar holati, qidiruv qumdoni, qabulga yozuvlar |
+| Onlayn yozilish | Boʻsh vaqtli shakl, bazada ikki marta yozilishdan himoya, Google Jadvaldagi nusxa, assistentdan vaqt takliflari |
 | Eval | 35 ta namunaviy savol; hit@k, MRR, rad etish aniqligi; chegarani tanlash; xohishga koʻra LLM-hakam |
 
 ## Mundarija
@@ -29,6 +30,7 @@ promptga tushdi, qaysi model javob berdi va boshqa modelga oʻtishga toʻgʻri k
 - [Vercel va Neonʼga joylash](#vercel-va-neonʼga-joylash)
 - [Loyiha tuzilmasi](#loyiha-tuzilmasi)
 - [Bilimlar bazasi](#bilimlar-bazasi)
+- [Onlayn yozilish](#onlayn-yozilish)
 - [Klinika maʼlumotlari](#klinika-maʼlumotlari)
 - [Dizayn va harakat](#dizayn-va-harakat)
 
@@ -197,6 +199,7 @@ Barcha oʻzgaruvchilar [`.env.example`](.env.example) da tasvirlangan. Asosiylar
 | `GOOGLE_DRIVE_FOLDER_ID` | boʻsh | Google Driveʼdagi bilimlar bazasi papkasi. Boʻsh — sinxronlash oʻchiq |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | boʻsh | Google xizmat hisobining JSON kaliti, toʻliq yoki base64 da |
 | `DRIVE_SYNC_INTERVAL_SEC` | `20` | Server Driveʼdagi fayllar oʻzgarganini shuncha soniyada bir martadan koʻp tekshirmaydi |
+| `GOOGLE_BOOKINGS_SHEET_ID` | boʻsh | Yozuvlar nusxasi uchun Google Jadval: identifikator yoki toʻliq havola. Xizmat hisobiga **Muharrir** huquqi kerak |
 
 ## LLM provayderlari va fallback
 
@@ -245,6 +248,7 @@ imzoli httpOnly-cookie, 7 kun amal qiladi.
 | Sinxronlash | Drive papkasi ulanganmi, qachon tekshirilgan, «Hozir tekshirish» tugmasi va oʻzgarishlar jurnali: qaysi fayl, nima boʻldi, nechta qator qoʻshildi va oʻchirildi, nechta boʻlak qayta hisoblandi |
 | Modellar | Zanjir, har bir modelning holati va pauzasi, «Ping», embeddinglar holati va «Hammasini qayta indekslash» |
 | Qumdon | Savol berib, javob yaratmasdan qidiruv va tayyor promptni koʻrish. Darsda qulay |
+| Yozuvlar | Kelgusi, oʻtgan va bekor qilingan yozuvlar qidiruv bilan, yozuvni bekor qilish, Google Jadval holati va «Jadvalga yuborish» tugmasi |
 
 ## Eval
 
@@ -336,6 +340,7 @@ Word fayllari, ish jadvali — Excel jadvali:
 
 ```
 <Drive papkasi>/
+├── doctors.xlsx     onlayn yozilish uchun shifokorlar va qabul soatlari
 ├── ru/  prices.docx  faq.docx  services.docx  about.docx  schedule.xlsx
 └── uz/  …xuddi shunday
 ```
@@ -399,6 +404,34 @@ uchun kerak.
 Jadvaldagi telefon, uy va qavat — saytdagi kabi `__` toʻldirgichlari: bot sahifada yoʻq raqamni
 aytmaydi.
 
+## Onlayn yozilish
+
+Bemor «Kontaktlar» boʻlimidagi shaklda yoʻnalish, shifokor, kun va boʻsh soatni tanlaydi hamda ism
+va telefonini qoldiradi. Birinchi qabul bir soat davom etadi. Yozilish 14 kun oldinga ochiq, eng
+yaqin vaqt — hozirdan kamida bir soat keyin (Toshkent vaqti, UTC+5).
+
+| Qism | Qanday ishlaydi |
+| --- | --- |
+| Shifokorlar va qabul soatlari | Drive papkasining ildizidagi `doctors.xlsx` jadvali: kod, ikki tilda F.I.Sh. va mutaxassislik, yoʻnalish, shifokor haqida va hafta kunlari boʻyicha soatlar (`09:00–14:00`; bir nechta smena — vergul bilan; boʻsh yoki `выходной` — ishlamaydi). U boshqa hujjatlar kabi sinxronlanadi, bot ham shifokorlar haqida undan biladi. Jadvaldan olib tashlangan shifokorga yozilib boʻlmaydi, lekin unga qilingan yozuvlar saqlanib qoladi |
+| Ikki marta yozilishsiz | Buni bazaning oʻzi kafolatlaydi: faol yozuvlar uchun shifokor va vaqt boʻyicha noyob indeks. Ikki kishi tugmani bir vaqtda bossa, biri yoziladi, ikkinchisi «bu vaqt hozirgina band qilindi» degan xabarni koʻradi va shakl boʻsh vaqtlarni qayta yuklaydi |
+| Suiisteʼmoldan himoya | Bitta IP dan soatiga 5 ta yozuv, bitta telefonga 3 tadan koʻp boʻlmagan kelgusi yozuv, botlar uchun yashirin tuzoq-maydon |
+| Google Jadval | Har bir yozuv va bekor qilish administrator uchun Google Jadvalning «Записи» varagʻiga nusxalanadi. Asosiy nusxa — baza. Google javob bermasa, qator keyingi yozuv bilan yoki admin paneldagi tugma orqali yuboriladi. Qatorlar yozuv raqami boʻyicha topiladi va joyida yangilanadi, shuning uchun takroriy yuborish dublikat yaratmaydi |
+| Assistent | Savol yozilish yoki boʻsh vaqt haqida boʻlsa, server promptga mos shifokorlarning boʻsh vaqtlarini qoʻshadi — faqat shifokor va vaqt, bemorlar maʼlumoti yoʻq. Assistent 2–3 ta vaqt taklif qiladi, javob ostida esa tugmalar chiqadi: bitta bosish chatni yopadi va shifokor hamda vaqt tanlangan shaklni ochadi. Assistentning oʻzi yozib qoʻymaydi va chatda ism yoki telefon soʻramaydi. Model oʻylab topgan vaqt tugmaga aylanmaydi: server har birini haqiqiy boʻsh vaqtlar bilan solishtiradi |
+| Admin panel | «Yozuvlar» boʻlimi: kelgusi, oʻtgan va bekor qilingan yozuvlar, raqam, ism yoki telefon boʻyicha qidiruv, bekor qilish (vaqt yana boʻshaydi) va Google Jadval holati |
+
+**Google Jadvalni qanday ulash**
+
+1. Oʻsha Google Cloud loyihasida: **APIs & Services → Library → Google Sheets API → Enable**.
+2. Istalgan joyda (masalan, bilimlar bazasi yonida) boʻsh Google Jadval yarating va uni xizmat
+   hisobining e-mailiga **Muharrir** huquqi bilan ulashing. «Записи» varagʻi va sarlavha oʻzi
+   yaratiladi.
+3. Jadval havolasi yoki identifikatorini `GOOGLE_BOOKINGS_SHEET_ID` ga yozing (`.env` da va
+   Vercelʼda), `npm run db:migrate` ni ishga tushiring va qayta deploy qiling.
+4. Admin panel → «Yozuvlar» jadval ulanganmi va nechta qator yuborilishini kutayotganini koʻrsatadi.
+
+Jadvalsiz ham yozilish ishlaydi: yozuvlar bazada saqlanadi va admin panelda koʻrinadi. Backendsiz
+(demo rejimi) shakl oʻrnida klinika Telegramiga havola koʻrsatiladi.
+
 ## Klinika maʼlumotlari
 
 Matnlar, narxlar, telefon va manzil `src/i18n/ru.ts` va `src/i18n/uz.ts` da. Ikkala faylni ham
@@ -427,9 +460,8 @@ boʻlmasin. Saytda ularning ostida punktir chiziq va «demo maʼlumot» izohi bo
 koʻrsatadi: aks holda `tel:` hech qayerga olib bormasdi. Raqamlar paydo boʻlishi bilan toʻrtala joy
 oʻzi havolaga aylanadi.
 
-**Qabulga yozilish shakli.** Yozilish uchun backend hozircha yoʻq. Shakl ism va telefonni (`+998` va
-9 raqam) tekshiradi, arizani buferga nusxalaydi va klinikaning Telegramini ochadi. Endpoint paydo
-boʻlganda `components/Contacts.tsx` dagi `onSubmit` tanasini `fetch()` bilan almashtiring.
+**Qabulga yozilish shakli.** Yozilish qanday ishlashi va Google Jadvalni qanday ulash —
+[Onlayn yozilish](#onlayn-yozilish) boʻlimida.
 
 ## Dizayn va harakat
 
