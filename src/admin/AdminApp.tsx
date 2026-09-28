@@ -11,12 +11,13 @@ import { Knowledge } from './sections/Knowledge'
 import { Sync } from './sections/Sync'
 import { Models } from './sections/Models'
 import { Sandbox } from './sections/Sandbox'
+import { Bookings } from './sections/Bookings'
 
 /* ============================================================
    Админка RAG. Один пароль (ADMIN_PASSWORD), сессия — подписанная
    httpOnly-cookie. Разделы идут в порядке жизненного цикла RAG:
    что спросили → чего не нашли → как в целом → поправить базу →
-   модели → проверить поиск руками.
+   модели → проверить поиск руками. Отдельно — записи на приём.
    ============================================================ */
 
 const SECTIONS = [
@@ -27,6 +28,7 @@ const SECTIONS = [
   { id: 'sync', title: 'Синхронизация', hint: 'Google Drive и журнал изменений' },
   { id: 'models', title: 'Модели', hint: 'Цепочка LLM и эмбеддинги' },
   { id: 'sandbox', title: 'Песочница поиска', hint: 'Поиск и промпт без генерации' },
+  { id: 'bookings', title: 'Записи', hint: 'Приёмы, отмена, Google Таблица' },
 ] as const
 
 type SessionState = SessionInfo | 'loading' | { error: string }
@@ -156,6 +158,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           {current.id === 'sync' && <Sync />}
           {current.id === 'models' && <Models />}
           {current.id === 'sandbox' && <Sandbox />}
+          {current.id === 'bookings' && <Bookings />}
         </main>
       </div>
     </div>

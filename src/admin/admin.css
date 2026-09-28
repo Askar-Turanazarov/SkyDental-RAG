@@ -618,3 +618,12 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
 .prompt__summary { cursor: pointer; font-weight: 600; }
 .prompt__label { font-size: 12px; color: var(--content-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* Записи на приём */
+.bookings td { vertical-align: top; }
+.bookings td p { margin: 2px 0 0; }
+.bookings__when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bookings__comment { max-width: 28ch; overflow-wrap: anywhere; }
+.bookings__confirm { display: inline-flex; gap: var(--s-1); }
+.bookings tr[data-status='cancelled'] td:not(.table__actions) { color: var(--content-secondary); }
+.bookings tr[data-status='cancelled'] .bookings__when strong { text-decoration: line-through; }

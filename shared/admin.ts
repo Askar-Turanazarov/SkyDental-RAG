@@ -4,6 +4,7 @@
    ============================================================ */
 
 import type { AnswerKind, AnswerMeta, Attempt, ChatMode, Locale, RefusalReason, RetrievalInfo } from './protocol.js'
+import type { ServiceId } from './booking.js'
 
 export interface SessionInfo {
   /** false — ADMIN_PASSWORD не задан, админка выключена. */
@@ -199,4 +200,59 @@ export interface SyncRunResult {
   checked: boolean
   files: number
   changes: SyncLogEntry[]
+}
+
+/* ---------- Записи на приём ---------- */
+
+export type AppointmentScope = 'upcoming' | 'past' | 'cancelled' | 'all'
+
+export interface AppointmentRow {
+  code: string
+  createdAt: string
+  startsAt: string
+  /** Дата и время по Ташкенту. */
+  date: string
+  time: string
+  doctorId: string
+  doctor: string
+  service: ServiceId
+  patientName: string
+  patientPhone: string
+  comment: string | null
+  locale: Locale
+  source: 'site' | 'chat'
+  status: 'booked' | 'cancelled'
+  cancelledAt: string | null
+  /** Строка в Google Таблице актуальна. */
+  synced: boolean
+}
+
+export interface SheetStatus {
+  enabled: boolean
+  /** Почему не подключено: какой переменной нет. */
+  problem: string | null
+  url: string | null
+  serviceEmail: string | null
+  /** Записей, которые ещё не ушли в Таблицу (новые или изменённые). */
+  pending: number
+  lastOkAt: string | null
+  lastError: string | null
+}
+
+export interface AppointmentList {
+  total: number
+  rows: AppointmentRow[]
+  sheet: SheetStatus
+}
+
+export interface CancelResult {
+  appointment: AppointmentRow
+  sheet: SheetStatus
+}
+
+export interface SheetPushResponse {
+  /** null — Таблица не настроена или отправку уже ведёт другой запрос. */
+  pushed: number | null
+  error: string | null
+  sheet: SheetStatus
 }

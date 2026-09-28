@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type {
+  AppointmentList,
+  AppointmentScope,
+  CancelResult,
   DocumentDetail,
   DocumentRow,
   GapGroup,
@@ -10,6 +13,7 @@ import type {
   SandboxResult,
   SaveResult,
   SessionInfo,
+  SheetPushResponse,
   Stats,
   SyncRunResult,
   SyncStatus,
@@ -21,6 +25,8 @@ import type {
 import { ANSWER_KINDS } from '../../shared/protocol.js'
 import type { AnswerKind, AnswerMeta, Locale, RefusalReason, RetrievalInfo } from '../../shared/protocol.js'
 import { queryTerms } from '../../shared/text.js'
+import { cancelAppointment, listAppointments, sheetStatus } from '../booking/manage.js'
+import { pushToSheet } from '../booking/sheet.js'
 import { getDb } from '../db/client.js'
 import { env } from '../env.js'
 import { ChainError, chainStatus, generateText, resetCooldowns } from '../llm/chain.js'
@@ -469,6 +475,36 @@ admin.get('/sync', async (c) => c.json<SyncStatus>(await syncStatus()))
 
 /** «Проверить сейчас»: в обход интервала. */
 admin.post('/sync', async (c) => c.json<SyncRunResult>(await syncFromDrive('admin', true)))
+
+/* ---------- Записи на приём ---------- */
+
+const SCOPES: AppointmentScope[] = ['upcoming', 'past', 'cancelled', 'all']
+
+admin.get('/appointments', async (c) => {
+  const q = c.req.query()
+  return c.json<AppointmentList>(
+    await listAppointments({
+      scope: SCOPES.includes(q.scope as AppointmentScope) ? (q.scope as AppointmentScope) : 'upcoming',
+      search: (q.q ?? '').trim().slice(0, 80),
+      limit: Math.min(Math.max(Number(q.limit) || 100, 1), 500),
+      offset: Math.max(Number(q.offset) || 0, 0),
+    }),
+  )
+})
+
+/** Отмена освобождает окно; строка в Google Таблице обновляется на месте. */
+admin.post('/appointments/:code/cancel', async (c) => {
+  const appointment = await cancelAppointment(c.req.param('code'))
+  if (!appointment) return c.json({ error: 'not-found' }, 404)
+  await pushToSheet().catch((err) => console.error('[sheet]', err))
+  return c.json<CancelResult>({ appointment, sheet: await sheetStatus() })
+})
+
+/** «Отправить в таблицу»: повторить отправку того, что не ушло. */
+admin.post('/appointments/sheet', async (c) => {
+  const res = await pushToSheet()
+  return c.json<SheetPushResponse>({ pushed: res?.pushed ?? null, error: res?.error ?? null, sheet: await sheetStatus() })
+})
 
 /* ---------- Модели и индекс ---------- */
 
