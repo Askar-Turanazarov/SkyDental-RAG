@@ -21,20 +21,39 @@ interface ServiceAccount {
 let account: ServiceAccount | null | undefined
 let cached: { token: string; expiresAt: number } | null = null
 
+/** Почему ключ не прочитался — для раздела «Синхронизация» в админке. */
+export let serviceAccountError: string | null = null
+
+/** Вставленный в панель JSON бывает в кавычках или с настоящими переводами строк внутри ключа. */
+function parseKey(raw: string): ServiceAccount {
+  let text = raw.replace(/^(['"])([\s\S]*)\1$/, '$2').trim()
+  if (!text.startsWith('{')) text = Buffer.from(text, 'base64').toString('utf8').trim()
+  try {
+    return JSON.parse(text) as ServiceAccount
+  } catch (err) {
+    // Перевод строки внутри "private_key" ломает JSON, а между полями — нет.
+    try {
+      return JSON.parse(text.replace(/\r?\n/g, '\\n')) as ServiceAccount
+    } catch {
+      throw err
+    }
+  }
+}
+
 /** JSON ключа: целиком или в base64 (так его проще вставить в Vercel). */
 export function serviceAccount(): ServiceAccount | null {
   if (account !== undefined) return account
   const raw = env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!raw) return (account = null)
   try {
-    const text = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8')
-    const parsed = JSON.parse(text) as ServiceAccount
+    const parsed = parseKey(raw)
     if (!parsed.client_email || !parsed.private_key) throw new Error('нет client_email или private_key')
     // Из панели Vercel перевод строки в ключе иногда приходит как «\n».
     parsed.private_key = parsed.private_key.replace(/\\n/g, '\n')
     return (account = parsed)
   } catch (err) {
-    console.error('[drive] GOOGLE_SERVICE_ACCOUNT_JSON не читается:', (err as Error).message)
+    serviceAccountError = (err as Error).message
+    console.error('[drive] GOOGLE_SERVICE_ACCOUNT_JSON не читается:', serviceAccountError)
     return (account = null)
   }
 }

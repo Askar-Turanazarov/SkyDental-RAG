@@ -106,7 +106,7 @@ export function Sync() {
               </dl>
             ) : (
               <Notice tone="warn">
-                Google Drive не подключён: задайте <code>GOOGLE_DRIVE_FOLDER_ID</code> и{' '}
+                Google Drive не подключён{data.problem && <> — <strong>{data.problem}</strong></>}. Задайте <code>GOOGLE_DRIVE_FOLDER_ID</code> и{' '}
                 <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> (в <code>.env</code> и в Vercel → Environment Variables). Пока бот
                 отвечает по документам, которые уже есть в базе. Инструкция — в README.
               </Notice>

@@ -2,7 +2,7 @@ import type { SyncAction, SyncLogEntry, SyncRunResult, SyncStatus, SyncTrigger }
 import { lineDiff } from '../../shared/diff.js'
 import type { Locale } from '../../shared/protocol.js'
 import { getDb } from '../db/client.js'
-import { serviceAccount } from '../drive/auth.js'
+import { serviceAccount, serviceAccountError } from '../drive/auth.js'
 import { download, driveEnabled, listFolder } from '../drive/client.js'
 import type { DriveFile } from '../drive/client.js'
 import { officeToMarkdown } from '../drive/convert.js'
@@ -171,6 +171,13 @@ export async function syncStatus(limit = 50): Promise<SyncStatus> {
   const folder = env.GOOGLE_DRIVE_FOLDER_ID
   return {
     enabled: driveEnabled(),
+    problem: !folder
+      ? 'не задан GOOGLE_DRIVE_FOLDER_ID'
+      : !env.GOOGLE_SERVICE_ACCOUNT_JSON
+        ? 'не задан GOOGLE_SERVICE_ACCOUNT_JSON'
+        : !serviceAccount()
+          ? `GOOGLE_SERVICE_ACCOUNT_JSON не читается: ${serviceAccountError ?? 'неизвестная ошибка'}`
+          : null,
     folderUrl: folder ? `https://drive.google.com/drive/folders/${folder}` : null,
     serviceEmail: serviceAccount()?.client_email ?? null,
     checkedAt: state?.checkedAt ?? null,

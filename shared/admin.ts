@@ -184,6 +184,8 @@ export interface SyncLogEntry {
 export interface SyncStatus {
   /** Заданы папка и ключ сервисного аккаунта. */
   enabled: boolean
+  /** Почему не подключено: какой переменной нет или почему не читается ключ. */
+  problem: string | null
   folderUrl: string | null
   /** E-mail сервисного аккаунта: на него «расшаривают» папку. */
   serviceEmail: string | null
