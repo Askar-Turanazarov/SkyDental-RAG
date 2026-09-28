@@ -169,7 +169,8 @@ npm run dev
 | `npm run dev` | Vite va API birga (`dev:web` va `dev:api` ularni alohida ishga tushiradi) |
 | `npm run build` | Frontend va server turlarini tekshiradi, keyin `dist/` ga yigʻadi |
 | `npm run db:migrate` | `server/db/schema.sql` ni `DATABASE_URL` dagi bazaga qoʻllaydi |
-| `npm run seed` | `content/rag/{ru,uz}/*.md` ni bazaga yuklaydi va indekslaydi. Bazada allaqachon bor hujjatlarga tegmaydi |
+| `npm run seed` | `content/drive/{ru,uz}/*.docx` va `schedule.xlsx` ni bazaga yuklaydi va indekslaydi. Bazada allaqachon bor hujjatlarga tegmaydi. Google Drive ulangan boʻlsa, keyin bazani papka bilan sinxronlaydi |
+| `npm run export:office` | Bazadagi joriy hujjatlarni `content/drive/` ga (Word va Excel) chiqaradi va ular yoʻqotishsiz qayta oʻqilishini tekshiradi |
 | `npm run seed -- --force` | Hujjatlarni fayllar mazmuni bilan qayta yozadi. Har bir qayta yozish — yangi versiya, eskilari tarixda qoladi |
 | `npm run seed -- --reindex` | Barcha hujjatlar indeksini qayta quradi, masalan `EMBED_MODEL` almashtirilgandan keyin |
 | `npm run eval` | Namunaviy toʻplamda qidiruv koʻrsatkichlari. [Eval](#eval) ga qarang |
@@ -193,6 +194,9 @@ Barcha oʻzgaruvchilar [`.env.example`](.env.example) da tasvirlangan. Asosiylar
 | `ADMIN_SECRET` | hosil qilinadi | Admin cookie imzosi uchun sir. Yaratish: `openssl rand -hex 32` |
 | `IP_SALT` | ishlab chiqish qiymati | IP xeshi uchun tuz. Prodakshnda oʻzingiznikini bering |
 | `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SEC` | `20`, `600` | Bitta IPʼdan oyna davomida chatga nechta savol berish mumkin |
+| `GOOGLE_DRIVE_FOLDER_ID` | boʻsh | Google Driveʼdagi bilimlar bazasi papkasi. Boʻsh — sinxronlash oʻchiq |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | boʻsh | Google xizmat hisobining JSON kaliti, toʻliq yoki base64 da |
+| `DRIVE_SYNC_INTERVAL_SEC` | `20` | Server Driveʼdagi fayllar oʻzgarganini shuncha soniyada bir martadan koʻp tekshirmaydi |
 
 ## LLM provayderlari va fallback
 
@@ -237,7 +241,8 @@ imzoli httpOnly-cookie, 7 kun amal qiladi.
 | Dialoglar va baholar | Filtrlar bilan barcha savollar: baholangan, 👎, 👍, izohli, javobsiz; RAG yoki RAGsiz rejim. Bosilganda — toʻliq iz |
 | Bazadagi boʻshliqlar | Bot javob topa olmagan savollar, umumiy soʻz oʻzaklari boʻyicha guruhlangan, «Bazaga qoʻshish» tugmasi bilan |
 | Statistika | 👍 ulushi, rad etishlar ulushi, modellar boʻyicha javoblar, fallback holatlari, p50 va p95 kechikish |
-| Bilimlar bazasi | Tillar boʻyicha hujjatlar va boʻlaklarga ajratishning jonli koʻrinishi bilan markdown muharriri. Saqlash yangi versiya yaratadi va faqat oʻzgargan boʻlaklarni qayta indekslaydi. Diff va orqaga qaytarishli versiyalar tarixi, `.md` yoki `.zip` ga eksport |
+| Bilimlar bazasi | Tillar boʻyicha hujjatlar, boʻlaklarga ajratishning jonli koʻrinishi va diff bilan versiyalar tarixi. Google Driveʼdan kelgan hujjatlar faqat oʻqish uchun, ularda «Google Driveʼda ochish» tugmasi bor. Drive boʻlmasa, hujjatlar shu yerda tahrirlanadi: saqlash yangi versiya yaratadi va faqat oʻzgargan boʻlaklarni qayta indekslaydi. `.md` yoki `.zip` ga eksport |
+| Sinxronlash | Drive papkasi ulanganmi, qachon tekshirilgan, «Hozir tekshirish» tugmasi va oʻzgarishlar jurnali: qaysi fayl, nima boʻldi, nechta qator qoʻshildi va oʻchirildi, nechta boʻlak qayta hisoblandi |
 | Modellar | Zanjir, har bir modelning holati va pauzasi, «Ping», embeddinglar holati va «Hammasini qayta indekslash» |
 | Qumdon | Savol berib, javob yaratmasdan qidiruv va tayyor promptni koʻrish. Darsda qulay |
 
@@ -303,14 +308,16 @@ server/
 ├── llm/                provayderlar (gemini, openaiCompat, anthropic, local), reestr, fallback zanjiri
 ├── rag/                ingest, retrieve, prompt, answer — RAG pipeline
 ├── admin/              admin panel marshrutlari, kirish, zip eksport
+├── drive/              Google Drive: xizmat hisobi bilan kirish, fayllar roʻyxati, Word/Excel → markdown
 └── rateLimit.ts
 shared/                 frontend va server uchun umumiy kod
 ├── chunker.ts          markdown → boʻlaklar (demo-bot, server va admin paneldagi koʻrinish)
 ├── protocol.ts         soʻrov, SSE hodisalari va iz turlari
 └── sse.ts, text.ts     SSE tahlili; soʻzlar boʻyicha qidiruv uchun soʻz oʻzaklari
-scripts/                migrate, seed, eval
+scripts/                migrate, seed, export-office, eval
 eval/golden.json        eval uchun savollar
-content/rag/{ru,uz}/    boshlangʻich bilimlar bazasi (seed)
+content/drive/{ru,uz}/  Word va Excel dagi bilimlar bazasi: Drive papkasining nusxasi, seed
+content/rag/{ru,uz}/    brauzerdagi demo-bot uchun markdown (serversiz)
 src/
 ├── components/chat/    ChatWidget, useChat, ragClient, RetrievalTrace, AnswerText, demo-bot
 ├── admin/              admin panel (alohida kirish nuqtasi admin.html)
@@ -322,28 +329,75 @@ src/
 
 ## Bilimlar bazasi
 
-Boshlangʻich maʼlumotlar oddiy markdownʼda:
+### Manba — Google Driveʼdagi papka
+
+Bot javob oladigan hujjatlar Google Driveʼda turadi. FAQ, narxlar, xizmatlar va «klinika haqida» —
+Word fayllari, ish jadvali — Excel jadvali:
 
 ```
-content/rag/
-├── ru/{prices,faq,schedule,services,about}.md
-└── uz/{prices,faq,schedule,services,about}.md
+<Drive papkasi>/
+├── ru/  prices.docx  faq.docx  services.docx  about.docx  schedule.xlsx
+└── uz/  …xuddi shunday
 ```
 
-`npm run seed` bu fayllarni bazaga yuklaydi. Shundan keyin **haqiqat manbai — baza**. Bilimlar
-bazasini admin panelda tahrirlang: har bir saqlash versiyaga aylanadi va unga qaytish mumkin.
-Fayllarni olish uchun eksportdan foydalaning. Takroriy `npm run seed` `--force` berilmasa, bazada
-allaqachon bor hujjatlarga tegmaydi.
+Kengaytmasiz fayl nomi hujjat identifikatoriga aylanadi. Yuklangan `.docx`/`.xlsx` fayllar ham,
+«asl» Google Hujjatlar va Jadvallar ham mos keladi: ikkinchisini server kerakli formatga oʻzi
+eksport qiladi.
 
-Boʻlaklarga ajratish ikki tuzilmaga tayanadi:
+**Bot oʻzgarishlarni qanday bilib oladi.** Javobdan oldin server papkani tekshiradi, lekin
+`DRIVE_SYNC_INTERVAL_SEC` da bir martadan koʻp emas (standart — 20 s). Driveʼga bitta soʻrov har
+bir faylning oʻzgargan vaqtini qaytaradi. Faqat oʻzgargan fayllar yuklab olinadi, embeddinglar esa
+faqat matni haqiqatan oʻzgargan boʻlaklar uchun qayta hisoblanadi. Driveʼdagi tuzatish botning
+keyingi javobidayoq koʻrinadi. Har bir oʻzgarish admin paneldagi jurnalga yoziladi («Sinxronlash»
+boʻlimi). Drive ishlamasa, bot bazada bor maʼlumotlar boʻyicha javob beradi, xato ham jurnalga
+tushadi.
 
-- `# Sarlavha` — hujjat nomi, manba yozuviga kiradi;
-- `## Boʻlim` — bitta boʻlak;
-- **jadval qatori** — alohida boʻlak, birinchi ustun manba yozuviga kiradi. Narxlar roʻyxati uchun
-  bu muhim: aks holda barcha pozitsiyalar bitta boʻlakka yopishib qolardi.
+### Qanday ulash
 
-`schedule.md` dagi telefon, uy va qavat — saytdagi kabi `__` toʻldirgichlari: bot sahifada yoʻq
-raqamni aytmaydi.
+1. [Google Cloud Console](https://console.cloud.google.com/) → loyiha yarating yoki tanlang →
+   **APIs & Services → Library → Google Drive API → Enable**.
+2. **IAM & Admin → Service Accounts → Create service account**. Rollar kerak emas. Keyin
+   **Keys → Add key → JSON**: kalit fayli yuklab olinadi.
+3. Driveʼda `ru` va `uz` ichki papkalari bor papka yarating va ularga `content/drive/` dagi
+   fayllarni yuklang.
+4. Papkani xizmat hisobining e-mailiga (`…@….iam.gserviceaccount.com`) **Oʻquvchi** huquqi bilan
+   ulashing.
+5. `.env` va Vercel → Settings → Environment Variables da bering:
+   - `GOOGLE_DRIVE_FOLDER_ID` — `drive.google.com/drive/folders/<id>` manzilining oxirgi qismi;
+   - `GOOGLE_SERVICE_ACCOUNT_JSON` — JSON kalit mazmuni bitta qatorda (yoki base64 da).
+6. Sxema hali yangilanmagan boʻlsa, `npm run db:migrate`. Keyin admin panel → «Sinxronlash» →
+   «Hozir tekshirish».
+
+Xizmat hisobi kaliti — maxfiy: uni faqat `.env` da va Vercel sozlamalarida saqlang.
+
+### Fayllar formati
+
+Word: **Sarlavha 1** — hujjat nomi, **Sarlavha 2** — boʻlim (bitta boʻlim — bitta boʻlak), ostida
+oddiy xatboshilar, roʻyxatlar va jadvallar. Jadvalning har bir qatori alohida boʻlak, birinchi ustun
+manba yozuviga kiradi. Narxlar roʻyxati uchun bu muhim: aks holda barcha pozitsiyalar bitta boʻlakka
+yopishib qolardi.
+
+Excel (jadval): birinchi varaq, **varaq nomi** — hujjat nomi. Ustunlar:
+
+| Раздел (boʻlim) | Пункт (band) | Значение (qiymat) |
+| --- | --- | --- |
+| Ish vaqti va qabul soatlari | Dushanba | 09:00–20:00 |
+| Ish vaqti va qabul soatlari | | Oxirgi yozuv — yopilishdan bir soat oldin… |
+| Messenjerlar va ijtimoiy tarmoqlar | Telegram | @skydental_uz — yozilish, narxlar boʻyicha savollar |
+
+Bir xil «boʻlim»li qatorlar bitta boʻlakka yigʻiladi: shunda haftaning barcha kunlari «qachon
+ishlaysiz» savoliga birga javob beradi. «Band» boʻsh boʻlsa, qator oddiy xatboshiga aylanadi.
+
+### Driveʼsiz
+
+`GOOGLE_DRIVE_FOLDER_ID` berilmagan boʻlsa, hammasi avvalgidek ishlaydi: `npm run seed`
+`content/drive/` dagi fayllarni yuklaydi, hujjatlar admin panelda tahrirlanadi.
+`npm run export:office` bazaning joriy mazmunini Word va Excel ga qaytaradi, masalan Drive papkasini
+birinchi marta toʻldirish uchun. `content/rag/*.md` faqat brauzerda serversiz ishlaydigan demo-bot
+uchun kerak.
+
+Jadvaldagi telefon, uy va qavat — saytdagi kabi `__` toʻldirgichlari: bot sahifada yoʻq raqamni
+aytmaydi.
 
 ## Klinika maʼlumotlari
 
@@ -355,7 +409,7 @@ va tarjima qilinmagan matn saytga chiqmaydi.
 | --- | --- |
 | Telegram va xarita havolalari | `src/config.ts` |
 | SEO: manzil, telefon, ish vaqti | `index.html` dagi JSON-LD bloki va meta-teglar |
-| Chat-bot javoblari | bilimlar bazasi (admin panel yoki birinchi seedʼgacha `content/rag/`) |
+| Chat-bot javoblari | Google Driveʼdagi bilimlar bazasi papkasi (Driveʼsiz — admin panel) |
 
 > Hozir barcha raqamlar — **toʻldirgichlar**: narxlar, ochilgan yil, reyting. Nashr qilishdan oldin
 > ularni haqiqiysiga almashtiring.

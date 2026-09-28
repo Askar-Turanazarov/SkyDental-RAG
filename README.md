@@ -169,7 +169,8 @@ npm run dev
 | `npm run dev` | Vite and the API together (`dev:web` and `dev:api` run them separately) |
 | `npm run build` | Type-checks the frontend and the server, then builds into `dist/` |
 | `npm run db:migrate` | Applies `server/db/schema.sql` to the database in `DATABASE_URL` |
-| `npm run seed` | Loads `content/rag/{ru,uz}/*.md` into the database and indexes them. Documents already in the database are left alone |
+| `npm run seed` | Loads `content/drive/{ru,uz}/*.docx` and `schedule.xlsx` into the database and indexes them. Documents already in the database are left alone. When Google Drive is connected, it then syncs the database with the folder |
+| `npm run export:office` | Exports the current database documents to `content/drive/` (Word and Excel) and checks that they read back without loss |
 | `npm run seed -- --force` | Overwrites documents with the markdown files. Each overwrite becomes a new version, and the old ones stay in the history |
 | `npm run seed -- --reindex` | Rebuilds the index of all documents, for example after changing `EMBED_MODEL` |
 | `npm run eval` | Retrieval metrics on the golden set. See [Eval](#eval) |
@@ -193,6 +194,9 @@ Everything is described in [`.env.example`](.env.example). The main variables:
 | `ADMIN_SECRET` | derived | Secret for signing the admin cookie. Generate one: `openssl rand -hex 32` |
 | `IP_SALT` | dev value | Salt for hashing IP addresses. Set your own in production |
 | `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SEC` | `20`, `600` | Chat questions allowed per IP per window |
+| `GOOGLE_DRIVE_FOLDER_ID` | empty | Knowledge base folder in Google Drive. Empty disables sync |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | empty | Google service account JSON key, raw or base64 |
+| `DRIVE_SYNC_INTERVAL_SEC` | `20` | The server checks Drive for changed files at most once per this many seconds |
 
 ## LLM providers and fallback
 
@@ -237,7 +241,8 @@ session is an httpOnly cookie signed with HMAC and valid for 7 days.
 | Dialogs and feedback | All questions with filters: rated, 👎, 👍, with a comment, unanswered; RAG or no-RAG mode. Click one to open its full trace |
 | Knowledge gaps | Questions the bot could not answer, grouped by shared word stems, with an "Add to the base" button |
 | Stats | Share of 👍, share of refusals, answers per model, fallbacks, p50 and p95 latency |
-| Knowledge base | Documents by language and a markdown editor with a live preview of the chunking. Saving creates a new version and reindexes only the changed chunks. Includes version history with diff and rollback, and export to `.md` or `.zip` |
+| Knowledge base | Documents by language with a live preview of the chunking and version history with diff. Documents from Google Drive are read-only and have an "Open in Google Drive" button. Without Drive, documents are edited right here: saving creates a new version and reindexes only the changed chunks. Export to `.md` or `.zip` |
+| Sync | Whether the Drive folder is connected, when it was last checked, a "Check now" button, and the change log: which file, what happened, lines added and removed, chunks re-embedded |
 | Models | The chain, each model's state and pause, Ping, embedding state and "Reindex all" |
 | Sandbox | Ask a question and see the retrieval and the finished prompt without generating an answer. Handy in class |
 
@@ -302,14 +307,16 @@ server/
 ├── llm/                providers (gemini, openaiCompat, anthropic, local), registry, fallback chain
 ├── rag/                ingest, retrieve, prompt, answer: the RAG pipeline
 ├── admin/              admin routes, auth, zip export
+├── drive/              Google Drive: service account sign-in, file listing, Word/Excel → markdown
 └── rateLimit.ts
 shared/                 code shared by the frontend and the server
 ├── chunker.ts          markdown → chunks (demo bot, server and admin preview)
 ├── protocol.ts         request, SSE event and trace types
 └── sse.ts, text.ts     SSE parsing; word stems for keyword search
-scripts/                migrate, seed, eval
+scripts/                migrate, seed, export-office, eval
 eval/golden.json        eval questions
-content/rag/{ru,uz}/    starting knowledge base (seed)
+content/drive/{ru,uz}/  knowledge base in Word and Excel: copy of the Drive folder, seed
+content/rag/{ru,uz}/    markdown for the in-browser demo bot (no server)
 src/
 ├── components/chat/    ChatWidget, useChat, ragClient, RetrievalTrace, AnswerText, demo bot
 ├── admin/              admin panel (separate entry admin.html)
@@ -321,28 +328,69 @@ src/
 
 ## Knowledge base
 
-The starting data lives in plain markdown:
+### Source: a Google Drive folder
+
+The documents the bot answers from live in Google Drive. The FAQ, price list, services and
+"about" pages are Word files, and the schedule is an Excel sheet:
 
 ```
-content/rag/
-├── ru/{prices,faq,schedule,services,about}.md
-└── uz/{prices,faq,schedule,services,about}.md
+<Drive folder>/
+├── ru/  prices.docx  faq.docx  services.docx  about.docx  schedule.xlsx
+└── uz/  …the same
 ```
 
-`npm run seed` loads these files into the database. From then on the **database is the source of
-truth**. Edit the knowledge base in the admin panel, where every save is a version you can roll
-back to. To get the files out, use export. A repeated `npm run seed` does not touch documents that
-are already in the database, unless you pass `--force`.
+The file name without the extension becomes the document id. Both uploaded `.docx`/`.xlsx` files and
+native Google Docs and Sheets work: the server exports the latter to the right format itself.
 
-The chunker relies on two structures:
+**How the bot learns about changes.** Before answering, the server checks the folder, but no more
+often than once per `DRIVE_SYNC_INTERVAL_SEC` (20 s by default). One Drive request returns every
+file's modified time. Only changed files are downloaded, and only chunks whose text actually changed
+are re-embedded. An edit in Drive reaches the very next answer. Every change is written to the admin
+log (the Sync section). If Drive is unavailable, the bot answers from what is already in the
+database, and the error goes to the log too.
 
-- `# Title` is the document name and goes into the source label;
-- `## Section` becomes one chunk;
-- **a table row** becomes a separate chunk, with the first column in the source label. This matters
-  for the price list: otherwise every position would stick together into one chunk.
+### Setup
 
-The phone, house number and floor in `schedule.md` are the same `__` placeholders as on the site,
-so the bot never gives a number that isn't on the page.
+1. [Google Cloud Console](https://console.cloud.google.com/) → create or pick a project →
+   **APIs & Services → Library → Google Drive API → Enable**.
+2. **IAM & Admin → Service Accounts → Create service account**. No roles are needed. Then
+   **Keys → Add key → JSON** downloads the key file.
+3. Create a Drive folder with `ru` and `uz` subfolders and upload the files from `content/drive/`.
+4. Share the folder with the service account e-mail (`…@….iam.gserviceaccount.com`) as **Viewer**.
+5. In `.env` and in Vercel → Settings → Environment Variables set:
+   - `GOOGLE_DRIVE_FOLDER_ID`: the last part of `drive.google.com/drive/folders/<id>`;
+   - `GOOGLE_SERVICE_ACCOUNT_JSON`: the JSON key contents on one line (or base64).
+6. Run `npm run db:migrate` if the schema is not updated yet, then admin → Sync → Check now.
+
+The service account key is a secret: keep it only in `.env` and in the Vercel settings.
+
+### File format
+
+Word: **Heading 1** is the document title, **Heading 2** is a section (one section, one chunk),
+followed by ordinary paragraphs, lists and tables. Each table row becomes a separate chunk, with the
+first column in the source label. This matters for the price list: otherwise every position would
+stick together into one chunk.
+
+Excel (schedule): the first sheet, and the **sheet name** is the document title. Columns:
+
+| Раздел (section) | Пункт (item) | Значение (value) |
+| --- | --- | --- |
+| Часы работы и приёма | Понедельник | 09:00–20:00 |
+| Часы работы и приёма | | Последняя запись — за час до закрытия… |
+| Мессенджеры и соцсети | Telegram | @skydental_uz — запись, вопросы по ценам |
+
+Rows with the same section become one chunk, so all weekdays answer "when are you open" together.
+A row with an empty item becomes a plain paragraph.
+
+### Without Drive
+
+If `GOOGLE_DRIVE_FOLDER_ID` is not set, everything works as before: `npm run seed` loads the files
+from `content/drive/`, and documents are edited in the admin panel. `npm run export:office` exports
+the current database back to Word and Excel, for example to fill the Drive folder the first time.
+`content/rag/*.md` are only used by the demo bot that runs in the browser without a server.
+
+The phone, house number and floor in the schedule are the same `__` placeholders as on the site, so
+the bot never gives a number that isn't on the page.
 
 ## Clinic data
 
@@ -354,7 +402,7 @@ fails, so an untranslated text never reaches the site.
 | --- | --- |
 | Telegram link, map link | `src/config.ts` |
 | SEO: address, phone, hours | the JSON-LD block and meta tags in `index.html` |
-| Answers of the chat bot | the knowledge base (admin panel or `content/rag/` before seeding) |
+| Answers of the chat bot | the knowledge base folder in Google Drive (without Drive, the admin panel) |
 
 > All numbers are currently **placeholders**: prices, the opening year and the rating. Replace them
 > with real ones before publishing.
