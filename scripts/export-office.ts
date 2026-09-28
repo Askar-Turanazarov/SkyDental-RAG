@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from 'docx'
 import ExcelJS from 'exceljs'
+import { DOCTORS_SLUG, doctorsToXlsx, listDoctors, parseDoctorsXlsx } from '../server/booking/doctors.js'
 import { getDb } from '../server/db/client.js'
 import { officeToMarkdown } from '../server/drive/convert.js'
 import type { OfficeKind } from '../server/drive/convert.js'
@@ -13,6 +14,7 @@ import { chunkMarkdown } from '../shared/chunker.js'
    Берёт тексты из таблицы documents (там могут быть правки из
    админки, более свежие, чем content/rag/*.md) и пишет
    content/drive/{ru,uz}/<slug>.docx, а график — schedule.xlsx.
+   Врачи из таблицы doctors — content/drive/doctors.xlsx.
    Эти файлы загружаются в папку Google Drive.
 
    В конце каждый файл читается обратно тем же конвертером, что и
@@ -126,8 +128,10 @@ async function toXlsx(md: string): Promise<Buffer> {
 /* ---------- экспорт + сверка ---------- */
 
 const db = await getDb()
+// Документ «Врачи» не выгружается: его собирает сервер из doctors.xlsx.
 const docs = await db.query<{ locale: string; slug: string; body_md: string }>(
-  'select locale, slug, body_md from documents order by locale, slug',
+  'select locale, slug, body_md from documents where slug <> $1 order by locale, slug',
+  [DOCTORS_SLUG],
 )
 
 let problems = 0
@@ -144,6 +148,16 @@ for (const d of docs) {
   const lost = before.filter((c) => !after.includes(c)).length
   problems += lost
   console.log(`  ${d.locale}/${d.slug}.${kind}: фрагментов ${after.length}${lost ? `, расходятся: ${lost} из ${before.length}` : ', совпадают'}`)
+}
+
+// Врачи и график → doctors.xlsx в корне; обратное чтение должно дать тот же список.
+const doctors = await listDoctors()
+if (doctors.length) {
+  const data = await doctorsToXlsx(doctors)
+  await writeFile(fileURLToPath(new URL('doctors.xlsx', root)), data)
+  const same = JSON.stringify(await parseDoctorsXlsx(data)) === JSON.stringify(doctors)
+  if (!same) problems++
+  console.log(`  doctors.xlsx: врачей ${doctors.length}${same ? ', читается обратно без потерь' : ', при обратном чтении расходится'}`)
 }
 
 console.log(problems ? `Есть расхождения: ${problems}` : 'Готово: нарезка совпадает с базой.')

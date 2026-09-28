@@ -61,7 +61,7 @@ export function Sync() {
     <>
       <SectionHead
         title="Синхронизация"
-        lede="Документы базы знаний лежат в папке Google Drive. Перед ответом бот сверяется с папкой (не чаще раза в интервал) и подтягивает изменённые файлы: пересчитываются только фрагменты, которые действительно поменялись."
+        lede="Документы базы знаний лежат в папке Google Drive. Перед ответом бот сверяется с папкой (не чаще раза в интервал) и подтягивает изменённые файлы: пересчитываются только фрагменты, которые действительно поменялись. В корне папки лежит таблица doctors — врачи и часы приёма для онлайн-записи."
         actions={
           data?.enabled && (
             <button type="button" className="btn btn--secondary btn--small" disabled={busy} onClick={check}>
@@ -146,6 +146,8 @@ function LogTable({ rows }: { rows: SyncLogEntry[] }) {
                   <>
                     <Tag>{r.locale.toUpperCase()}</Tag> {r.fileName ?? r.slug}
                   </>
+                ) : r.fileName ? (
+                  r.fileName
                 ) : (
                   <span className="muted">вся папка</span>
                 )}

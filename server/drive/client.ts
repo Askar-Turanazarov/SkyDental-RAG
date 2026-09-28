@@ -9,6 +9,7 @@ import type { OfficeKind } from './convert.js'
    Ожидаемая раскладка:
      <папка>/ru/prices.docx, faq.docx, …, schedule.xlsx
      <папка>/uz/…
+     <папка>/doctors.xlsx — врачи и график (server/booking/doctors.ts)
    Имя файла без расширения — slug документа. Подходят и файлы
    Word/Excel, загруженные в Drive, и «родные» Google Документы/
    Таблицы: вторые экспортируются в docx/xlsx на лету.
@@ -75,25 +76,43 @@ function kindOf(f: RawFile): OfficeKind | null {
   return null
 }
 
-/** Все документы базы знаний в папке: подпапки ru/ и uz/. */
-export async function listFolder(): Promise<DriveFile[]> {
+/** Таблица врачей и графика в корне папки: одна на оба языка. */
+export type DoctorsFile = RawFile & { kind: 'xlsx' }
+
+export interface DriveFolder {
+  files: DriveFile[]
+  doctors: DoctorsFile | null
+}
+
+const baseName = (name: string) => name.replace(/\.(docx|xlsx)$/i, '').trim().toLowerCase()
+
+/**
+ * Что лежит в папке: документы из подпапок ru/ и uz/ и таблица
+ * врачей doctors в корне. Имя doctors зарезервировано под неё: такой
+ * документ в ru/ или uz/ пропускается (его собирает сервер из таблицы).
+ */
+export async function listFolder(): Promise<DriveFolder> {
   const top = await children(env.GOOGLE_DRIVE_FOLDER_ID!)
   const files: DriveFile[] = []
-  for (const dir of top) {
-    const locale = dir.name.trim().toLowerCase()
-    if (dir.mimeType !== FOLDER || (locale !== 'ru' && locale !== 'uz')) continue
-    for (const f of await children(dir.id)) {
+  let doctors: DoctorsFile | null = null
+  for (const entry of top) {
+    const name = baseName(entry.name)
+    if (entry.mimeType !== FOLDER) {
+      if (name === 'doctors' && kindOf(entry) === 'xlsx') doctors = { ...entry, kind: 'xlsx' }
+      continue
+    }
+    if (name !== 'ru' && name !== 'uz') continue
+    for (const f of await children(entry.id)) {
       const kind = kindOf(f)
-      if (!kind) continue
-      const slug = f.name.replace(/\.(docx|xlsx)$/i, '').trim().toLowerCase()
-      files.push({ ...f, locale, slug, kind })
+      const slug = baseName(f.name)
+      if (kind && slug !== 'doctors') files.push({ ...f, locale: name, slug, kind })
     }
   }
-  return files
+  return { files, doctors }
 }
 
 /** Содержимое файла в формате docx/xlsx. */
-export async function download(file: DriveFile): Promise<Buffer> {
+export async function download(file: Pick<DriveFile, 'id' | 'mimeType' | 'kind'>): Promise<Buffer> {
   const res =
     file.mimeType === GDOC || file.mimeType === GSHEET
       ? await call(`/files/${file.id}/export`, { mimeType: file.kind === 'docx' ? DOCX : XLSX })

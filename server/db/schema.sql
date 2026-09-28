@@ -135,3 +135,25 @@ create table if not exists sync_log (
   message          text
 );
 create index if not exists sync_log_created_idx on sync_log (created_at desc);
+
+-- ============================================================
+-- Запись на приём (server/booking/).
+-- Врачи и их график приходят из doctors.xlsx в корне папки Drive.
+-- Врач, пропавший из таблицы, не удаляется (на него могут быть
+-- записи), а помечается active = false.
+-- hours: {"1": [["09:00", "14:00"]], …} — день недели ISO → смены.
+-- ============================================================
+create table if not exists doctors (
+  id            text primary key,
+  sort          int not null default 0,
+  name_ru       text not null,
+  name_uz       text not null,
+  specialty_ru  text not null,
+  specialty_uz  text not null,
+  service       text not null,
+  hours         jsonb not null default '{}',
+  bio_ru        text not null default '',
+  bio_uz        text not null default '',
+  active        boolean not null default true,
+  updated_at    timestamptz not null default now()
+);

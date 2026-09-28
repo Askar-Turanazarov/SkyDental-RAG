@@ -3,8 +3,9 @@ import { lineDiff } from '../../shared/diff.js'
 import type { Locale } from '../../shared/protocol.js'
 import { getDb } from '../db/client.js'
 import { serviceAccount, serviceAccountError } from '../drive/auth.js'
+import { DOCTORS_SLUG, doctorsMarkdown, parseDoctorsXlsx, saveDoctors } from '../booking/doctors.js'
 import { download, driveEnabled, listFolder } from '../drive/client.js'
-import type { DriveFile } from '../drive/client.js'
+import type { DoctorsFile, DriveFile, DriveFolder } from '../drive/client.js'
 import { officeToMarkdown } from '../drive/convert.js'
 import { env } from '../env.js'
 import { saveDocument } from './ingest.js'
@@ -24,7 +25,9 @@ import { saveDocument } from './ingest.js'
    3. скачиваются только файлы с новым modifiedTime, дальше обычный
       saveDocument(): версия, пропуск неизменившегося текста и
       пересчёт векторов только у изменённых фрагментов;
-   4. файл пропал из Drive — документ удаляется.
+   4. файл пропал из Drive — документ удаляется;
+   5. doctors.xlsx в корне — список врачей для записи (таблица doctors),
+      из него же собирается документ «Врачи» на обоих языках.
    Каждое реальное изменение и каждая ошибка пишутся в sync_log.
    ============================================================ */
 
@@ -98,18 +101,51 @@ async function logError(trigger: SyncTrigger, e: Partial<LogInput> & { message: 
   return seen ? null : log(trigger, { ...e, action: 'error' })
 }
 
+const LOCALES: Locale[] = ['ru', 'uz']
+
+const upToDate = (doc: DocState | undefined, f: Pick<DriveFile, 'id' | 'modifiedTime'>) =>
+  doc?.drive_file_id === f.id && doc.drive_modified_at === f.modifiedTime
+
 async function syncFile(trigger: SyncTrigger, f: DriveFile, doc: DocState | undefined): Promise<SyncLogEntry | null> {
-  const db = await getDb()
   const bodyMd = await officeToMarkdown(f.kind, await download(f))
   if (!bodyMd.trim()) throw new Error('файл пустой или не распознан')
+  return saveFromDrive(trigger, f, f.locale, f.slug, bodyMd, doc)
+}
 
-  const res = await saveDocument({ locale: f.locale, slug: f.slug, bodyMd, note: `Google Drive: ${f.name}` })
+/**
+ * Таблица врачей: сначала проверяется вся, потом одним запросом
+ * пишется в doctors, и из неё собирается документ «Врачи» (ru, uz).
+ * Ошибка в таблице — исключение до записи: врачи остаются прежними.
+ */
+async function syncDoctors(trigger: SyncTrigger, f: DoctorsFile, byKey: Map<string, DocState>): Promise<SyncLogEntry[]> {
+  const docs = LOCALES.map((l) => byKey.get(`${l}/${DOCTORS_SLUG}`))
+  if (docs.every((d) => upToDate(d, f))) return []
+  const doctors = await parseDoctorsXlsx(await download(f))
+  await saveDoctors(doctors)
+  const out: SyncLogEntry[] = []
+  for (const [i, locale] of LOCALES.entries()) {
+    const entry = await saveFromDrive(trigger, f, locale, DOCTORS_SLUG, doctorsMarkdown(doctors, locale), docs[i])
+    if (entry) out.push(entry)
+  }
+  return out
+}
+
+async function saveFromDrive(
+  trigger: SyncTrigger,
+  f: Pick<DriveFile, 'id' | 'name' | 'modifiedTime' | 'webViewLink'>,
+  locale: Locale,
+  slug: string,
+  bodyMd: string,
+  doc: DocState | undefined,
+): Promise<SyncLogEntry | null> {
+  const db = await getDb()
+  const res = await saveDocument({ locale, slug, bodyMd, note: `Google Drive: ${f.name}` })
   await db.query(
     `update documents set source = 'drive', drive_file_id = $2, drive_modified_at = $3, drive_url = $4 where id = $1`,
     [res.id, f.id, f.modifiedTime, f.webViewLink],
   )
 
-  const base = { locale: f.locale, slug: f.slug, fileName: f.name, version: res.version }
+  const base = { locale, slug, fileName: f.name, version: res.version }
   if (!res.changed) {
     // Текст тот же, но индекс мог досчитаться только сейчас: прошлая
     // попытка сохранила текст и упала на эмбеддингах.
@@ -143,14 +179,15 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
 
   const db = await getDb()
   const changes: SyncLogEntry[] = []
-  let files: DriveFile[]
+  let folder: DriveFolder
   try {
-    files = await listFolder()
+    folder = await listFolder()
   } catch (err) {
     const entry = await logError(trigger, { message: errorText(err) })
     if (entry) changes.push(entry)
     return { checked: true, files: 0, changes }
   }
+  const { files, doctors } = folder
 
   const docs = await db.query<DocState>(
     'select id, locale, slug, source, drive_file_id, drive_modified_at, body_md from documents',
@@ -159,7 +196,7 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
 
   for (const f of files) {
     const doc = byKey.get(`${f.locale}/${f.slug}`)
-    if (doc?.drive_file_id === f.id && doc.drive_modified_at === f.modifiedTime) continue
+    if (upToDate(doc, f)) continue
     try {
       const entry = await syncFile(trigger, f, doc)
       if (entry) changes.push(entry)
@@ -170,11 +207,22 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
     }
   }
 
+  if (doctors) {
+    try {
+      changes.push(...(await syncDoctors(trigger, doctors, byKey)))
+    } catch (err) {
+      console.error('[sync]', doctors.name, err)
+      const entry = await logError(trigger, { slug: DOCTORS_SLUG, fileName: doctors.name, message: errorText(err) })
+      if (entry) changes.push(entry)
+    }
+  }
+
   // Удалённые из Drive: только документы, которые пришли из Drive.
   // Страховка: если в подпапке языка не нашлось ни одного файла, это
   // скорее переименованная, перемещённая или закрытая папка, чем
   // намеренная чистка, — документы этого языка не трогаем, а пишем ошибку.
   const present = new Set(files.map((f) => `${f.locale}/${f.slug}`))
+  if (doctors) LOCALES.forEach((l) => present.add(`${l}/${DOCTORS_SLUG}`))
   const localesWithFiles = new Set(files.map((f) => f.locale))
   const guarded = new Set<Locale>()
   for (const d of docs) {
@@ -184,7 +232,15 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
       continue
     }
     await db.query('delete from documents where id = $1', [d.id])
-    changes.push(await log(trigger, { locale: d.locale, slug: d.slug, action: 'removed' }))
+    changes.push(
+      await log(trigger, {
+        locale: d.locale,
+        slug: d.slug,
+        action: 'removed',
+        // Врачей не трогаем: на них могут быть записи.
+        message: d.slug === DOCTORS_SLUG ? 'таблицы doctors в папке нет; врачи для записи остались прежними' : null,
+      }),
+    )
   }
   for (const locale of guarded) {
     const entry = await logError(trigger, {
@@ -194,7 +250,7 @@ export async function syncFromDrive(trigger: SyncTrigger, force = false): Promis
     if (entry) changes.push(entry)
   }
 
-  return { checked: true, files: files.length, changes }
+  return { checked: true, files: files.length + (doctors ? 1 : 0), changes }
 }
 
 /**

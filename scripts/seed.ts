@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DOCTORS_SLUG, doctorsMarkdown, parseDoctorsXlsx, saveDoctors } from '../server/booking/doctors.js'
 import { getDb, migrate } from '../server/db/client.js'
 import { officeToMarkdown } from '../server/drive/convert.js'
 import type { OfficeKind } from '../server/drive/convert.js'
@@ -11,7 +12,8 @@ import type { Locale } from '../shared/protocol.js'
 
 /* ============================================================
    npm run seed — залить content/drive/{ru,uz}/*.docx|xlsx в базу и
-   проиндексировать. Это те же файлы, что лежат в папке Google Drive
+   проиндексировать; content/drive/doctors.xlsx — врачи и график для
+   записи и из них документ «Врачи». Это те же файлы, что лежат в папке Google Drive
    (npm run export:office), и читаются они тем же конвертером —
    seed нужен, когда Drive не подключён или база пустая.
 
@@ -38,6 +40,23 @@ const root = new URL('../content/drive/', import.meta.url)
 await migrate()
 const db = await getDb()
 
+async function seedDocument(locale: Locale, slug: string, read: () => Promise<string>) {
+  const [exists] = await db.query('select 1 from documents where locale = $1 and slug = $2', [locale, slug])
+  if (exists && !force) {
+    console.log(`  ${locale}/${slug}: уже в базе, пропускаю (--force, чтобы перезаписать)`)
+    return
+  }
+  const res = await saveDocument({ locale, slug, bodyMd: await read(), note: 'seed из content/drive', index: !noIndex })
+  const idx = res.index
+  console.log(
+    res.changed && !idx
+      ? `  ${locale}/${slug}: v${res.version}, записан без индекса`
+      : res.changed && idx
+      ? `  ${locale}/${slug}: v${res.version}, кусков ${idx.total}, векторов посчитано ${idx.embedded}, взято готовых ${idx.reused}`
+      : `  ${locale}/${slug}: без изменений`,
+  )
+}
+
 for (const locale of ['ru', 'uz'] as Locale[]) {
   const dir = fileURLToPath(new URL(`${locale}/`, root))
   const files = (await readdir(dir)).filter((f) => /\.(docx|xlsx)$/.test(f)).sort()
@@ -45,23 +64,21 @@ for (const locale of ['ru', 'uz'] as Locale[]) {
   for (const file of files) {
     const kind = extname(file).slice(1) as OfficeKind
     const slug = basename(file, extname(file))
-    const [exists] = await db.query('select 1 from documents where locale = $1 and slug = $2', [locale, slug])
-    if (exists && !force) {
-      console.log(`  ${locale}/${slug}: уже в базе, пропускаю (--force, чтобы перезаписать)`)
-      continue
-    }
-    const bodyMd = await officeToMarkdown(kind, await readFile(join(dir, file)))
-    const res = await saveDocument({ locale, slug, bodyMd, note: 'seed из content/drive', index: !noIndex })
-    const idx = res.index
-    console.log(
-      res.changed && !idx
-        ? `  ${locale}/${slug}: v${res.version}, записан без индекса`
-        : res.changed && idx
-        ? `  ${locale}/${slug}: v${res.version}, кусков ${idx.total}, векторов посчитано ${idx.embedded}, взято готовых ${idx.reused}`
-        : `  ${locale}/${slug}: без изменений`,
-    )
+    if (slug === DOCTORS_SLUG) continue // документ «Врачи» собирается из doctors.xlsx ниже
+    await seedDocument(locale, slug, async () => officeToMarkdown(kind, await readFile(join(dir, file))))
   }
 }
+
+// Врачи и график: content/drive/doctors.xlsx → таблица doctors + документ «Врачи».
+const doctors = await parseDoctorsXlsx(await readFile(fileURLToPath(new URL('doctors.xlsx', root))))
+const [{ n }] = await db.query<{ n: number }>('select count(*)::int as n from doctors')
+if (n && !force) console.log(`  врачи: уже в базе (${n}), пропускаю (--force, чтобы перезаписать)`)
+else {
+  await saveDoctors(doctors)
+  console.log(`  врачи: ${doctors.length}`)
+}
+for (const locale of ['ru', 'uz'] as Locale[])
+  await seedDocument(locale, DOCTORS_SLUG, async () => doctorsMarkdown(doctors, locale))
 
 if (reindex) {
   const reports = await reindexAll()
